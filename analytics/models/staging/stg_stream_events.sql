@@ -1,0 +1,21 @@
+select
+    schema_version::integer as schema_version,
+    event_id::uuid as event_id,
+    event_type::text as event_type,
+    event_ts::timestamptz as event_ts,
+    customer_id::text as customer_id,
+    order_id::text as order_id,
+    product_id::text as product_id,
+    amount::numeric(14, 2) as amount,
+    currency::text as currency,
+    payment_provider::text as payment_provider,
+    shipment_provider::text as shipment_provider,
+    region::text as region,
+    status::text as status,
+    metadata::jsonb as metadata,
+    source_topic::text as source_topic,
+    source_partition::integer as source_partition,
+    source_offset::bigint as source_offset,
+    source_timestamp::timestamptz as source_timestamp,
+    ingested_at::timestamptz as ingested_at
+from {{ source('streaming_warehouse', 'stream_events') }}

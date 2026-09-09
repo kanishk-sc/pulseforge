@@ -1,0 +1,40 @@
+version: 2
+
+models:
+  - name: dim_customers
+    description: >-
+      Type 1 customer dimension. Grain is one observed customer_id. The contract has
+      no customer profile attributes, so only identity and observed event bounds are
+      modeled; no history or invented demographics are implied.
+    columns:
+      - name: customer_key
+        description: Deterministic MD5 surrogate key derived only from customer_id.
+        data_tests: [unique, not_null]
+      - name: customer_id
+        description: Natural customer identifier from the event contract.
+        data_tests: [unique, not_null]
+  - name: dim_products
+    description: >-
+      Type 1 product dimension. Grain is one observed product_id. The contract exposes
+      no product catalog attributes, so none are synthesized.
+    columns:
+      - name: product_key
+        description: Deterministic MD5 surrogate key derived only from product_id.
+        data_tests: [unique, not_null]
+      - name: product_id
+        description: Natural product identifier from the event contract.
+        data_tests: [unique, not_null]
+  - name: dim_regions
+    description: One row per region allowed by the version 1 event contract.
+    columns:
+      - name: region_key
+        description: Deterministic MD5 surrogate key derived only from region_code.
+        data_tests: [unique, not_null]
+      - name: region_code
+        description: Version 1 region code.
+        data_tests:
+          - unique
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [us-east, us-west, eu-west, ap-south]

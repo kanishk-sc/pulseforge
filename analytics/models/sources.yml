@@ -1,0 +1,78 @@
+version: 2
+
+sources:
+  - name: streaming_warehouse
+    description: >-
+      Phase 2-owned PostgreSQL relations. dbt reads these sources but never creates,
+      migrates, truncates, or writes them. Timestamps are timestamptz values and dbt
+      sessions run in UTC.
+    schema: public
+    tables:
+      - name: stream_events
+        description: >-
+          One durable, contract-valid logical event per event_id. Phase 2 also enforces
+          uniqueness of source_topic, source_partition, and source_offset. Very late
+          records rejected by the live watermark are absent here and remain in raw
+          object storage.
+        columns:
+          - name: event_id
+            description: Contract event UUID and durable logical-event identity.
+            data_tests: [unique, not_null]
+          - name: event_type
+            description: Version 1 business event type; meanings are not reinterpreted by dbt.
+            data_tests:
+              - not_null
+              - accepted_values:
+                  arguments:
+                    values:
+                      - order_created
+                      - payment_processed
+                      - payment_failed
+                      - shipment_created
+                      - shipment_delayed
+                      - refund_requested
+                      - inventory_updated
+                      - customer_login
+          - name: event_ts
+            description: Source event timestamp stored as timestamptz and interpreted in UTC.
+            data_tests: [not_null]
+          - name: region
+            description: Contract region code.
+            data_tests:
+              - not_null
+              - accepted_values:
+                  arguments:
+                    values: [us-east, us-west, eu-west, ap-south]
+          - name: source_topic
+            description: Kafka topic from which Spark read the record.
+            data_tests: [not_null]
+          - name: source_partition
+            description: Kafka partition from which Spark read the record.
+            data_tests: [not_null]
+          - name: source_offset
+            description: Kafka offset from which Spark read the record.
+            data_tests: [not_null]
+          - name: ingested_at
+            description: UTC timestamp at which Phase 2 archived the Kafka record.
+            data_tests: [not_null]
+      - name: stream_metrics_minute
+        description: >-
+          Phase 2 transactional minute/event-type counts and amount sums. Amounts retain
+          event semantics and are not revenue. The table is used for source quality checks,
+          not as a substitute for event-grain business facts.
+        columns:
+          - name: window_start
+            description: Inclusive UTC minute boundary.
+            data_tests: [not_null]
+          - name: window_end
+            description: Exclusive UTC minute boundary.
+            data_tests: [not_null]
+          - name: event_type
+            description: Event type aggregated in the row.
+            data_tests: [not_null]
+          - name: event_count
+            description: Count of newly inserted durable events in the minute and type.
+            data_tests: [not_null]
+          - name: total_amount
+            description: Sum of amounts for this event type; it is not a revenue metric.
+            data_tests: [not_null]

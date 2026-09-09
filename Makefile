@@ -1,4 +1,4 @@
-.PHONY: setup up down traffic lint test integration streaming streaming-test
+.PHONY: setup up down traffic lint test integration streaming streaming-test analytics-build analytics-test analytics-verify
 setup:
 	uv sync --frozen
 	uv run python scripts/init_env.py
@@ -19,3 +19,9 @@ streaming:
 	docker compose --profile streaming up -d --build --wait --wait-timeout 240
 streaming-test:
 	uv run pytest --run-integration --run-streaming
+analytics-build:
+	docker compose --profile analytics run --rm analytics-dbt build
+analytics-test:
+	docker compose --profile analytics run --rm analytics-dbt test
+analytics-verify:
+	uv run pytest -m analytics --run-integration --run-analytics

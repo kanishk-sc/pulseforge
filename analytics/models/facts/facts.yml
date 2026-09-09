@@ -1,0 +1,150 @@
+version: 2
+
+models:
+  - name: fct_orders
+    description: >-
+      Grain is one order_created source event. This records order creation, not payment
+      or revenue. The incremental merge uses source_event_id and rescans order events,
+      so replayed IDs cannot add rows and accepted late arrivals are included next run.
+    columns:
+      - name: source_event_id
+        description: Lineage UUID of the order_created event.
+        data_tests: [unique, not_null]
+      - name: order_id
+        description: Business order identifier.
+        data_tests: [not_null]
+      - name: customer_key
+        description: Deterministic customer dimension key.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_customers')
+                field: customer_key
+      - name: product_key
+        description: Deterministic product dimension key.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_products')
+                field: product_key
+      - name: region_key
+        description: Deterministic region dimension key.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_regions')
+                field: region_key
+  - name: fct_payment_attempts
+    description: >-
+      Grain is one payment_processed or payment_failed source event. Each row is an
+      attempt/result; payment_processed is successful and payment_failed is failed.
+      The failure-rate denominator is the count of both event types.
+    columns:
+      - name: source_event_id
+        description: Lineage UUID of the payment result event.
+        data_tests: [unique, not_null]
+      - name: event_type
+        description: Original payment event type.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [payment_processed, payment_failed]
+      - name: customer_key
+        description: Deterministic customer dimension key.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_customers')
+                field: customer_key
+      - name: product_key
+        description: Deterministic product dimension key.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_products')
+                field: product_key
+      - name: region_key
+        description: Deterministic region dimension key.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_regions')
+                field: region_key
+  - name: fct_shipments
+    description: >-
+      Grain is one shipment_created source event. shipment_delayed events are joined
+      by order_id as delay attributes and lineage arrays; they never create additional
+      shipment rows. A later delay updates the existing incremental row on the next run.
+    columns:
+      - name: source_event_id
+        description: Lineage UUID of the shipment_created event.
+        data_tests: [unique, not_null]
+      - name: delay_event_count
+        description: Number of shipment_delayed source events associated with the order.
+        data_tests: [not_null]
+      - name: customer_key
+        description: Deterministic customer dimension key.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_customers')
+                field: customer_key
+      - name: product_key
+        description: Deterministic product dimension key.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_products')
+                field: product_key
+      - name: region_key
+        description: Deterministic region dimension key.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_regions')
+                field: region_key
+  - name: fct_refund_requests
+    description: >-
+      Grain is one refund_requested source event. Rows and amounts describe requests;
+      they do not imply approval, settlement, or completed refunds.
+    columns:
+      - name: source_event_id
+        description: Lineage UUID of the refund_requested event.
+        data_tests: [unique, not_null]
+      - name: requested_amount
+        description: Amount requested by the event, not a completed refund amount.
+        data_tests: [not_null]
+      - name: customer_key
+        description: Deterministic customer dimension key.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_customers')
+                field: customer_key
+      - name: product_key
+        description: Deterministic product dimension key.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_products')
+                field: product_key
+      - name: region_key
+        description: Deterministic region dimension key.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_regions')
+                field: region_key

@@ -1,0 +1,85 @@
+version: 2
+
+models:
+  - name: mart_revenue_hourly
+    description: >-
+      Grain is one successful-payment event hour and region. Revenue is the sum of
+      payment_processed amounts only; order_created amounts are never added again.
+    columns:
+      - name: revenue_hour_utc
+        description: UTC event-time hour of successful payment events.
+        data_tests: [not_null]
+      - name: region_key
+        description: Region dimension key.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_regions')
+                field: region_key
+      - name: revenue_amount
+        description: Sum of successful payment amounts in the hour and region.
+        data_tests: [not_null]
+  - name: mart_payment_health_hourly
+    description: >-
+      Grain is one payment event hour and region. failure_rate is failed_payment_count
+      divided by payment_attempt_count, where attempts include payment_processed and
+      payment_failed events. Division by zero returns null.
+    columns:
+      - name: payment_hour_utc
+        description: UTC event-time hour of payment attempts.
+        data_tests: [not_null]
+      - name: failure_rate
+        description: Failed attempts divided by all payment attempts in the row.
+        data_tests: [not_null]
+  - name: mart_shipment_health_hourly
+    description: >-
+      Grain is one shipment-creation event hour and region. delayed_shipment_rate is
+      created shipments with at least one associated delay event divided by shipments
+      created in that cohort. Delay events update the creation cohort and are not counted
+      as shipments; the mart intentionally does not represent delay-occurrence hours.
+    columns:
+      - name: shipment_creation_hour_utc
+        description: UTC event-time hour of shipment_created events.
+        data_tests: [not_null]
+      - name: delayed_shipment_rate
+        description: Delayed created shipments divided by all created shipments in the cohort.
+        data_tests: [not_null]
+  - name: mart_refunds_hourly
+    description: >-
+      Grain is one refund-request event hour and region. Counts and amounts are requests,
+      never completed refunds.
+    columns:
+      - name: refund_request_hour_utc
+        description: UTC event-time hour of refund_requested events.
+        data_tests: [not_null]
+      - name: refund_request_count
+        description: Count of refund request events.
+        data_tests: [not_null]
+      - name: requested_amount
+        description: Sum of requested amounts, not settled refund value.
+        data_tests: [not_null]
+  - name: mart_operations_health_hourly
+    description: >-
+      Grain is one UTC event hour and region observed by any operational fact. This is
+      an analytical feature table, not anomaly or incident detection. Payment and shipment
+      rates retain their source-mart denominators. refund_requests_per_order is request
+      events divided by order_created events in the same hour and region and may exceed one.
+    columns:
+      - name: metric_hour_utc
+        description: UTC event-time hour shared by the component metrics.
+        data_tests: [not_null]
+      - name: region_key
+        description: Region dimension key.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_regions')
+                field: region_key
+      - name: payment_failure_rate
+        description: Failed payments divided by all payment attempts; null without attempts.
+      - name: delayed_shipment_rate
+        description: Delayed shipment creations divided by shipment creations; null without shipments.
+      - name: refund_requests_per_order
+        description: Refund request events divided by orders created; null without orders.

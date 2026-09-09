@@ -11,6 +11,10 @@ htmlcov/
 *.egg-info/
 dist/
 node_modules/
+analytics/target/
+analytics/logs/
+analytics/dbt_packages/
+analytics/.user.yml
 .idea/
 .vscode/
 *.log
