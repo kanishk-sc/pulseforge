@@ -7,7 +7,7 @@ from uuid import uuid4
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from pulseforge.config import Settings
@@ -21,7 +21,7 @@ class HealthResponse(BaseModel):
     status: Literal["ok", "degraded"]
     service: str = "pulseforge-api"
     version: str = "0.1.0"
-    dependencies: dict[str, str] = {}
+    dependencies: dict[str, str] = Field(default_factory=dict)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:

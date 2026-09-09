@@ -6,7 +6,7 @@ from enum import StrEnum
 from typing import Annotated, Literal, Self
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationInfo, model_validator
 
 
 class EventType(StrEnum):
@@ -59,13 +59,15 @@ class CommerceEvent(BaseModel):
     metadata: dict[str, JsonValue] = Field(default_factory=dict)
 
     @model_validator(mode="after")
-    def business_rules(self) -> Self:
+    def business_rules(self, info: ValidationInfo) -> Self:
+        # Archived records validate against their original ingestion clock on replay.
+        reference_time = (info.context or {}).get("reference_time") or datetime.now(UTC)
         if self.timestamp.tzinfo is None or self.timestamp.utcoffset() is None:
             raise ValueError("timestamp must include a timezone")
         if (
             not datetime(2020, 1, 1, tzinfo=UTC)
             <= self.timestamp
-            <= datetime.now(UTC) + timedelta(minutes=5)
+            <= reference_time + timedelta(minutes=5)
         ):
             raise ValueError("timestamp outside supported range")
         if self.status != STATUS_BY_TYPE[self.event_type]:
