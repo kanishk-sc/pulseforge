@@ -34,3 +34,25 @@ jobs:
         run: docker compose --profile streaming logs --no-color --tail 100
       - if: always()
         run: docker compose --profile streaming down
+  analytics-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.16"
+          python-version: "3.12"
+      - run: uv sync --frozen
+      - run: uv run python scripts/init_env.py
+      - run: docker compose config --quiet
+      - run: docker compose up -d --wait --wait-timeout 120 postgres
+      - run: docker compose --profile analytics build analytics-dbt
+      - run: docker compose --profile airflow build airflow
+      - run: docker compose --profile analytics run --rm analytics-dbt compile
+      - run: docker compose --profile airflow run --rm --no-deps airflow python /opt/pulseforge/scripts/verify_airflow_dag.py
+      - run: uv run pytest -m analytics --run-integration --run-analytics --junitxml=analytics-results.xml
+      - if: failure()
+        run: docker compose --profile analytics --profile airflow logs --no-color --tail 100
+      - if: always()
+        run: docker compose --profile analytics --profile airflow down

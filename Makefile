@@ -24,6 +24,7 @@ analytics-build:
 analytics-test:
 	docker compose --profile analytics run --rm analytics-dbt test
 analytics-verify:
+	docker compose --profile analytics build analytics-dbt
 	uv run pytest -m analytics --run-integration --run-analytics
 airflow:
 	docker compose --profile airflow up -d --build --wait --wait-timeout 180 airflow

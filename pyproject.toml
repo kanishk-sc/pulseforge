@@ -33,4 +33,8 @@ select = ["E", "F", "I", "UP", "B", "ASYNC"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
-markers = ["integration: requires the running Docker Compose foundation", "streaming: requires the streaming profile and performs controlled restarts/outages"]
+markers = [
+  "integration: requires the running Docker Compose foundation",
+  "streaming: requires the streaming profile and performs controlled restarts/outages",
+  "analytics: requires PostgreSQL and the analytics dbt image",
+]
