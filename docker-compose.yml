@@ -97,6 +97,33 @@ services:
       retries: 5
     restart: unless-stopped
 
+  streaming:
+    image: pulseforge-streaming:local
+    build:
+      context: .
+      dockerfile: infra/docker/spark.Dockerfile
+    profiles: ["streaming"]
+    environment:
+      <<: *app-env
+      STREAM_NAMESPACE: ${STREAM_NAMESPACE:-v1}
+      STREAM_TRIGGER: ${STREAM_TRIGGER:-5 seconds}
+      STREAM_MAX_OFFSETS: ${STREAM_MAX_OFFSETS:-1000}
+      SPARK_LOCAL_IP: 127.0.0.1
+      PYSPARK_SUBMIT_ARGS: --driver-memory 1g pyspark-shell
+    init: true
+    mem_limit: 3g
+    depends_on:
+      postgres: {condition: service_healthy}
+      bootstrap: {condition: service_completed_successfully}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import pathlib,time; p=pathlib.Path('/tmp/pulseforge-streaming-health.json'); assert p.exists() and time.time()-p.stat().st_mtime<20"]
+      interval: 10s
+      timeout: 5s
+      start_period: 120s
+      retries: 3
+    stop_grace_period: 120s
+    restart: "no"
+
   producer:
     <<: *app
     profiles: ["traffic"]

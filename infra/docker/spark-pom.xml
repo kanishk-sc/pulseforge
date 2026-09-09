@@ -1,0 +1,9 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>pulseforge</groupId><artifactId>spark-connectors</artifactId><version>1</version>
+  <dependencies>
+    <dependency><groupId>org.apache.spark</groupId><artifactId>spark-sql-kafka-0-10_2.13</artifactId><version>4.0.1</version></dependency>
+    <dependency><groupId>org.apache.hadoop</groupId><artifactId>hadoop-aws</artifactId><version>3.4.1</version></dependency>
+    <dependency><groupId>org.postgresql</groupId><artifactId>postgresql</artifactId><version>42.7.7</version></dependency>
+  </dependencies>
+</project>
