@@ -24,14 +24,20 @@ each milestone before expanding its scope. Checkmarks mean verified, not scaffol
 
 Verified on 2026-09-09: 73 local tests on fresh volumes; hosted CI passed 59
 unit/API/schema tests and 14 live integration tests. See [evidence](../verification.md).
-Phase 3 and later remain unimplemented.
+Phase 3 evidence is recorded separately below.
 
-## 3. Analytics engineering
-- [ ] dbt facts: orders, payments, shipments, refunds
-- [ ] Dimensions: customer, product, region; marts: revenue, failures, shipments, refunds, health
-- [ ] dbt relationships, uniqueness, accepted values and business-rule tests
-- [ ] Airflow transformations, quality reports, ingestion, aggregation and cleanup DAGs
-- [ ] Execute dbt and DAG validation against populated warehouse
+## 3. Analytics engineering (complete)
+- [x] dbt facts: orders, payment attempts, created shipments and refund requests
+- [x] Type 1 customer/product and fixed region dimensions; five hourly operational marts
+- [x] Source, relationship, uniqueness, accepted-value and singular business-rule tests
+- [x] Finite Airflow warehouse verification → dbt build → quality-summary DAG; Spark excluded
+- [x] Deterministic populated-warehouse, replay, rerun and real Airflow DAG validation
+
+Verified on 2026-09-09: 62 non-integration tests, 3 deterministic analytics tests,
+108 successful dbt build results, a successful real Airflow DAG run and 79 full local
+tests including every Phase 2 streaming recovery case. The hosted Phase 3 workflow is
+configured but has not yet run. See [design](phase-3-design.md) and
+[evidence](../verification.md). Phase 4 and later remain unimplemented.
 
 ## 4. Product layer
 - [ ] Typed metrics, incident, pipeline and quality APIs

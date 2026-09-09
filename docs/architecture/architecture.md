@@ -4,7 +4,9 @@
 
 PulseForge uses entirely synthetic commerce/logistics data. Phase 1 establishes a
 working ingestion boundary. Phase 2 adds the [streaming implementation](phase-2-design.md),
-including sink, checkpoint, watermark and recovery semantics. The seven-phase
+including sink, checkpoint, watermark and recovery semantics. Phase 3 adds the
+[analytics implementation](phase-3-design.md), including exact model grains, metric
+denominators, idempotent rebuilds and finite orchestration. The seven-phase
 [plan](implementation-plan.md) distinguishes implemented code from future architecture.
 The design prioritizes reproducibility, explicit failure behavior and useful tests.
 
@@ -52,9 +54,11 @@ windows, enrichment and checkpointed offsets. It is chosen to demonstrate distri
 processing semantics and unified Parquet transformations, not because the local
 generator requires a cluster. A simpler consumer would be cheaper at this local scale.
 
-Airflow will schedule finite work: dbt builds, quality reporting, runbook ingestion,
-aggregation and retention cleanup. It will not loop as the streaming consumer. Spark
-checkpoints own streaming progress; Airflow task retries own batch recovery.
+Airflow schedules one finite hourly chain: verify the warehouse connection, run the
+complete dbt build and tests, then summarize machine-readable quality results. It does
+not loop as the streaming consumer or manage Spark. Spark checkpoints own streaming
+progress; bounded Airflow task retries own analytics recovery. Runbook ingestion and
+retention cleanup remain out of scope.
 
 ## Lake layers and AWS portability
 
@@ -73,19 +77,26 @@ MinIO root keys. Phase 1 uses local credentials only; IAM support belongs with A
 deployment work. MinIO is pinned to a published community image for the local demo;
 review upstream security fixes and licensing before any production deployment.
 
-## Warehouse modeling (planned)
+## Warehouse modeling
 
 Store durable event IDs with a unique constraint and use transactional upserts. Spark's
 checkpoint alone cannot provide exactly-once behavior across multiple external sinks.
 Write each sink idempotently and reconcile partial progress on replay. Avoid claiming
 a distributed transaction between Kafka, Parquet and PostgreSQL.
 
-dbt staging normalizes source events; dimensions represent customer, product and region.
-Facts represent orders, payment attempts, shipment events and refund requests. Event
-grain must remain explicit: a shipment delay is not another shipment, and a refund
-request is not a completed refund. Marts must name those semantics and define the
-denominator of every rate. Initial dimensions can use Type 1 updates; historical
-attribute tracking should be introduced only when a real analytical question needs it.
+dbt staging preserves the complete Phase 2 event and minute-metric sources in UTC.
+Type 1 dimensions represent observed customer/product IDs and the four contract regions.
+Facts represent order creation, payment results, shipment creation and refund requests,
+with every row linked to its source event UUID. A shipment delay updates attributes on
+the created shipment instead of creating another shipment. A refund request is not a
+completed refund.
+
+Revenue sums successful payments only. Payment failure rate divides failed results by
+all processed plus failed attempts. Delayed shipment rate divides shipment creations
+with at least one delay by all creations in the same creation-hour cohort. Marts name
+those semantics, use UTC event-time hours and retain null when no denominator exists.
+The combined health mart is a feature table, not anomaly detection. See the
+[Phase 3 design](phase-3-design.md) for the full model table and late-arrival behavior.
 
 ## API, caching and failures
 

@@ -152,3 +152,127 @@ stack was restored and all five long-running services returned healthy.
   they are not proof of HDFS-style atomic rename semantics on object storage.
 - The two pre-existing Starlette/AnyIO deprecation warnings remain visible in Python tests.
 - No throughput, latency-percentile or scalability benchmark was run or claimed.
+
+# Phase 3 verification
+
+Execution date: **2026-09-09**. Windows host, Python 3.12.13, uv 0.11.16,
+Docker Desktop Linux engine 29.5.2, PostgreSQL 16.9, dbt Core 1.12.2,
+dbt-postgres 1.11.0 and Apache Airflow 3.3.0. This is functional correctness
+evidence, not a performance benchmark.
+
+## Verification scope
+
+Phase 3 was exercised against the live Phase 2 warehouse and in a UUID-named,
+disposable database created inside the real PostgreSQL service. The deterministic
+fixture initialized the exact Phase 2 schema, committed 12 accepted events through
+the existing transactional sink, attempted an event-ID replay, ran dbt twice and
+dropped the database afterward.
+
+The full regression command ran every foundation, streaming and analytics case while
+the streaming service was healthy:
+
+```sh
+docker compose --profile streaming up -d --build --wait --wait-timeout 240
+uv run pytest --run-integration --run-streaming --run-analytics --basetemp=.pytest_cache/full-tmp --junitxml=phase-3-results.xml
+```
+
+## Executed local results
+
+| Check | Actual result |
+| --- | --- |
+| Ruff format/check | 46 Python files already formatted; all lint checks passed |
+| Non-integration regression | 62 passed, 17 integration tests deselected |
+| dbt parse and compile | Both exited 0 against the configured PostgreSQL warehouse |
+| dbt build | 14 models and 93 data tests; **PASS=108, WARN=0, ERROR=0, SKIP=0, TOTAL=108** |
+| Explicit dbt test | 93 data tests plus the project hook; **PASS=94, WARN=0, ERROR=0, SKIP=0, TOTAL=94** |
+| Analytics acceptance | 3 passed in a disposable real database; exact dimension, fact, mart, lineage, replay and rerun assertions passed |
+| Full local regression | **79 passed, 0 failed, 0 errors, 0 skipped** in 217.93 seconds; two known upstream deprecation warnings |
+| Default Compose compatibility | `docker compose up -d --build --wait --wait-timeout 180` exited 0; API, Kafka, PostgreSQL and MinIO healthy; bootstrap exited 0 |
+| Airflow DAG import | Zero import errors; exactly `verify_warehouse`, `dbt_build`, `quality_summary` with the required linear dependencies |
+| Airflow service | Standalone service healthy; metadata database, scheduler, triggerer and DAG processor health checks healthy |
+| Real Airflow run | `airflow dags test pulseforge_analytics 2026-09-09T18:00:00+00:00` exited 0; all three tasks and the DAG run succeeded |
+| Airflow-run quality summary | `result_count=108`, statuses `pass=93` and `success=15`, failed count 0 |
+| Failure-domain separation | The streaming and Airflow containers were concurrently healthy after the DAG; 185 Phase 2 source events and existing analytics relations remained queryable |
+
+The deterministic expected values included four orders, four payment attempts, two
+created shipments, one refund request, four customers, four products and four regions.
+Successful-payment revenue totaled USD 380.00. The 10:00 east payment cohort contained
+two attempts and one failure for a 0.5 failure rate. One shipment was attributed exactly
+one delay; the other was not delayed. Repeating the source UUID committed zero new source
+rows, and the second dbt build retained stable source, fact and revenue totals.
+
+Milestone implementation commits are `9f658ea` (dbt models), `9c26881` (Airflow
+orchestration) and `d0bbe71` (acceptance tests and CI). The concluding documentation
+commit changes no executable code.
+
+## Failure behavior verified by construction and execution
+
+- PostgreSQL availability is checked before transformation. `dbt debug` and `dbt build`
+  return nonzero on connection failure; Airflow retries twice with a one-minute delay,
+  then leaves the DAG failed and visible.
+- A model error or dbt data-test failure makes `dbt_build` fail. Airflow's default
+  all-success dependency prevents the summary task from masking that failure.
+- The quality-summary program fails closed when results are missing, malformed or
+  contain failure/error statuses; unit tests cover successful and failed result sets.
+- Facts merge by source event UUID and dbt never writes the Phase 2 `public` sources.
+  The populated integration test's replay and second build prove stable row counts.
+- The DAG contains no Spark, streaming or checkpoint operation. The real DAG completed
+  while Spark continued from its existing checkpoint, demonstrating independent local
+  operation rather than scheduler control of the stream.
+
+## Failures found during implementation
+
+- dbt 1.12 rejects global project/profile arguments placed before the subcommand. The
+  container now supplies the profiles directory through its environment and invokes
+  subcommands in the analytics working directory.
+- A read-only analytics bind prevented dbt from writing generated target artifacts.
+  The project bind is writable while generated target/log/package paths remain ignored.
+- Airflow 3.3's public `DagBag` location and constructor differ from older examples.
+  The verifier now uses the current public import and constructor and executes inside
+  the pinned image.
+- Airflow could not initialize a root-owned named volume as its non-root runtime user.
+  The image now creates and owns its state directory before dropping privileges.
+- Windows denied access to pytest's default temporary directory after Docker-mounted
+  integration work. The successful local reruns supplied the documented workspace-local,
+  ignored `--basetemp`; no assertion or service behavior was changed.
+
+## Hosted CI status and limits
+
+- The workflow now has a separate `analytics-integration` job that builds both images,
+  compiles dbt, imports the real DAG and runs the deterministic PostgreSQL acceptance
+  test. It preserves the prior Python and streaming jobs.
+- No hosted Phase 3 run is claimed yet. Local workflow inspection and execution are not
+  evidence that GitHub Actions completed the new commit.
+- dbt deliberately rescans relevant accepted events for correct replay and late-arrival
+  behavior at this scale. A measured high-volume workload may justify a source-change
+  strategy later, but must preserve those semantics.
+- The streaming watermark can exclude a very late event before it reaches PostgreSQL.
+  dbt cannot recover that raw-only evidence; offline reconciliation remains future work.
+- Local dbt and Phase 2 services share one generated PostgreSQL development role.
+  Separate least-privilege source-reader and schema-owner roles are required before
+  production exposure.
+- Airflow's local SQLite metadata and simple auth are development choices. The generated
+  password has no checked-in default, and port 8080 binds to loopback only.
+- No dashboard, anomaly detector, incident API, telemetry system, AI assistant, cloud
+  resource, throughput benchmark or scalability claim is part of Phase 3.
+
+## Reproduce Phase 3
+
+```sh
+uv sync --frozen
+uv run python scripts/init_env.py
+uv run ruff format --check .
+uv run ruff check .
+uv run pytest -m "not integration" --basetemp=.pytest_cache/unit-tmp
+docker compose up -d --build --wait --wait-timeout 180
+docker compose --profile analytics build analytics-dbt
+docker compose --profile analytics run --rm analytics-dbt compile
+docker compose --profile analytics run --rm analytics-dbt build
+docker compose --profile airflow build airflow
+docker compose --profile airflow run --rm --no-deps airflow python /opt/pulseforge/scripts/verify_airflow_dag.py
+uv run pytest -m analytics --run-integration --run-analytics --basetemp=.pytest_cache/analytics-tmp
+```
+
+For the full Phase 2 plus Phase 3 regression, start the streaming profile and use the
+full regression command above. The tests intentionally stop and restart local services;
+run them only against a development stack without an independent producer.

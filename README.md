@@ -7,10 +7,11 @@ to reliable operational decisions: preserve the original event, validate its con
 process it once at the sink, model the business, detect explainable anomalies, and
 show the evidence behind an incident.
 
-**Current milestone: Phase 2 — streaming platform, verified locally and in CI.**
+**Current milestone: Phase 3 — analytics engineering, verified locally.**
 Kafka ingestion, Spark Structured Streaming, raw/cleaned/curated Parquet, a dead-letter
-pipeline and an idempotent PostgreSQL sink are implemented. dbt, the dashboard,
-anomaly detection and the AI assistant remain future work. All generated data is synthetic.
+pipeline, an idempotent PostgreSQL sink, dbt analytics and finite Airflow orchestration
+are implemented. The dashboard, anomaly detection and AI assistant remain future work.
+All generated data is synthetic.
 
 See the [implementation checklist](docs/architecture/implementation-plan.md) and
 [actual verification record](docs/verification.md).
@@ -42,8 +43,8 @@ flowchart LR
     V --> ST[PostgreSQL JDBC staging]
     ST --> W
     W --> M[Minute operational aggregates]
-    W -. Phase 3 .-> DBT[dbt facts / dimensions / marts]
-    AF[Airflow batch orchestration] -.-> DBT
+    W --> DBT[dbt facts / dimensions / marts]
+    AF[Airflow finite batch orchestration] --> DBT
     DBT -. Phase 4 .-> API[Metrics and incident APIs]
     API -.-> UI[React operations dashboard]
     RAG[Phase 6: evidence-based assistant] -.-> API
@@ -58,7 +59,7 @@ flowchart LR
 | Lake | MinIO, S3A, Parquet | Immutable raw evidence; committed cleaned/curated batches |
 | API | FastAPI | Implemented: liveness, dependency readiness, OpenAPI, request IDs, JSON logs |
 | Streaming | Spark 4.0.1, PySpark, Kafka connector | Event-time deduplication, DLQ, checkpoint recovery and JDBC staging |
-| Modeling | dbt, Airflow | Phase 3 |
+| Modeling | dbt, Airflow | Implemented: documented facts/dimensions/marts, tests and finite hourly DAG |
 | Product | React, TypeScript, Redis | Phase 4 |
 | Telemetry | Prometheus, Grafana, OpenTelemetry | Phase 5 |
 | Assistant | pgvector, provider abstraction | Phase 6, optional paid provider, offline support |
@@ -68,7 +69,8 @@ flowchart LR
 
 Prerequisites: Docker Desktop with Linux containers, Docker Compose v2, Git and
 [uv](https://docs.astral.sh/uv/getting-started/installation/). Allow approximately
-4 GB of Docker memory for the foundation; the Spark/Airflow phases will require more.
+4 GB of Docker memory for the foundation and 8 GB when running Spark and Airflow
+together.
 Commands work in PowerShell and Bash unless noted.
 
 ```sh
@@ -94,10 +96,12 @@ or application authentication, and must not be exposed to the Internet.
 | S3 endpoint | http://localhost:9000 |
 | Kafka bootstrap | localhost:9092 |
 | PostgreSQL | localhost:5432 |
+| Airflow UI (optional profile) | http://localhost:8080 |
 
 Initialization creates `commerce.events.v1`, `commerce.dead-letter.v1`, and the
 `pulseforge` bucket. It is safe to rerun. Starting streaming also runs the idempotent
-`warehouse.sql` schema initialization; final dimensional modeling belongs to Phase 3.
+`warehouse.sql` schema initialization. dbt reads those Phase 2 tables without changing
+their schema or sink semantics.
 
 ### Generate and inspect events
 
@@ -181,6 +185,44 @@ the dropped count. Planned offline reconciliation must use the raw archive. Do n
 delete a checkpoint to repair a transient outage. Read [failure semantics](docs/architecture/phase-2-design.md)
 before changing namespaces or planning a backfill.
 
+### Build and schedule analytics
+
+dbt runs in an opt-in, short-lived container. It reads the Phase 2 `public` source
+tables and creates `analytics_staging`, `analytics_core` and `analytics_marts`:
+
+```sh
+docker compose --profile analytics build analytics-dbt
+docker compose --profile analytics run --rm analytics-dbt build
+docker compose --profile analytics run --rm analytics-dbt test
+```
+
+`dbt build` is the normal command because it runs models and tests in dependency
+order. Running `dbt test` separately is useful after inspecting or changing data.
+Facts merge on their source event UUID; repeating a run or replaying an accepted UUID
+does not increase the fact grain. Accepted late arrivals are included on the next run.
+
+Airflow is also optional. It runs the same finite build every hour and never starts,
+stops or retries Spark:
+
+```sh
+docker compose --profile airflow up -d --build --wait --wait-timeout 180 airflow
+docker compose exec airflow cat /opt/airflow/state/simple_auth_manager_passwords.json.generated
+```
+
+Open http://localhost:8080 and sign in as `pulseforge` with the generated password.
+The password file is stored only in the ignored Airflow state volume; no default
+password is committed. The DAG's path is `verify_warehouse -> dbt_build ->
+quality_summary`. Trigger it in the UI, or perform a finite local verification with:
+
+```sh
+docker compose --profile airflow run --rm --no-deps airflow python /opt/pulseforge/scripts/verify_airflow_dag.py
+docker compose exec airflow airflow dags test pulseforge_analytics 2026-09-09T18:00:00+00:00
+```
+
+The second command creates a real local Airflow test run for the supplied logical
+timestamp and writes analytics data. See the [Phase 3 design](docs/architecture/phase-3-design.md)
+for model grains, metric denominators and failure/recovery behavior.
+
 ### Example API usage
 
 ```sh
@@ -198,9 +240,11 @@ errors. Metrics and incident endpoints will arrive with populated data in Phase 
 ```sh
 uv run ruff format --check .
 uv run ruff check .
-uv run pytest -m "not integration"
-uv run pytest -m integration --run-integration
-uv run pytest --run-integration --run-streaming
+uv run pytest -m "not integration" --basetemp=.pytest_cache/unit-tmp
+uv run pytest -m integration --run-integration --basetemp=.pytest_cache/integration-tmp
+uv run pytest --run-integration --run-streaming --basetemp=.pytest_cache/streaming-tmp
+uv run pytest -m analytics --run-integration --run-analytics --basetemp=.pytest_cache/analytics-tmp
+uv run pytest --run-integration --run-streaming --run-analytics --basetemp=.pytest_cache/full-tmp
 ```
 
 The second pytest command requires Compose. It verifies Kafka delivery/readback,
@@ -209,8 +253,11 @@ The streaming flag additionally exercises actual CLI producer → Spark → lake
 DLQ payload fidelity, duplicates, minute totals, watermark drops, restart and database
 outage/recovery. These tests intentionally stop/restart local services: run against a
 development stack, without another traffic generator. Integration tests skip by default.
-CI builds the Spark image and runs the full integration suite without private secrets.
-Frontend and dbt CI will be added with their implementations.
+The analytics flag creates a disposable database with the exact Phase 2 schema, loads
+deterministic events through the real sink, runs dbt twice and checks exact facts,
+marts, lineage and replay stability. CI keeps the Python, streaming and analytics jobs
+independent and requires no private secrets. The Phase 3 hosted CI result is not claimed
+until that workflow has run on GitHub.
 
 For host API development, stop the container API first, then run:
 
@@ -219,9 +266,11 @@ docker compose stop api
 uv run uvicorn pulseforge.api:app --reload --no-access-log
 ```
 
-`make setup`, `make up`, `make traffic`, `make lint`, `make test` and `make integration`
-are optional shortcuts when Make is installed. The explicit commands above work on
-Windows without Make. `docker compose down` stops the stack and preserves its data.
+`make setup`, `make up`, `make traffic`, `make lint`, `make test`, `make integration`,
+`make analytics-build`, `make analytics-test`, `make analytics-verify`, `make airflow`
+and `make airflow-verify` are optional shortcuts when Make is installed. The explicit
+commands above work on Windows without Make. `docker compose down` stops the stack and
+preserves its data.
 
 ## Data models and event flow
 
@@ -230,11 +279,12 @@ The current source contract is `src/pulseforge/events.py`, exported as JSON Sche
 timestamp bounds, per-type required fields and inventory quantity rules. JSON Schema
 alone cannot express all of those checks; consumers must use the runtime validator.
 
-The planned warehouse uses event-grain staging with `event_id` uniqueness, dimensions
-for customer/product/region and business facts for orders/payments/shipments/refunds.
-Facts will retain source event references. dbt marts will calculate hourly revenue,
-payment failure rates, shipment performance, refunds and operational health, with
-explicit denominators and late-arrival handling. See [design decisions](docs/architecture/architecture.md).
+The analytics warehouse uses event-grain staging with `event_id` uniqueness, Type 1
+customer/product dimensions, a fixed region dimension and source-lineage facts for
+orders, payment attempts, created shipments and refund requests. Hourly marts calculate
+successful-payment revenue, payment failure rates, created-shipment cohort delay rates,
+refund requests and combined operational features. Exact grains and denominators are
+documented in the [Phase 3 design](docs/architecture/phase-3-design.md).
 
 ## Observability and AI
 
@@ -270,7 +320,7 @@ environment, concurrency, throughput, p50/p95/p99 and error rate.
   Python projects would add packaging overhead before independent release cycles exist.
 - No placeholder infrastructure, empty application folders, fake charts or fabricated scores.
 
-Next is Phase 3: dbt facts/dimensions/marts and Airflow batch orchestration.
-Subsequent phases add operational APIs, the dashboard,
+Next is Phase 4: operational APIs, explainable anomaly detectors and the dashboard.
+Subsequent phases add
 observability and evidence-based AI. Kubernetes and AWS Terraform follow only after
 the local application works; no paid infrastructure is created automatically.
