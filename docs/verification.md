@@ -40,8 +40,8 @@ redaction, request IDs, producer failure paths, bounded retries and graceful sto
 - The current test dependencies emit two upstream deprecation warnings from Starlette's
   TestClient (httpx compatibility and an AnyIO alias). Tests pass; warnings are not hidden.
 - GitHub Actions is configured, but a local run is not evidence of a completed hosted CI run.
-- No Spark, dbt, Airflow, React, Redis, metrics server, anomaly detector or AI execution
-  is claimed by this report. These remain on the implementation checklist.
+- Phase 1 did not exercise Spark, dbt, Airflow, React, Redis, metrics servers, anomaly
+  detection or AI. The Phase 2 section below records subsequent streaming evidence.
 - No performance or AI evaluation results exist. A 100-event smoke run is not a benchmark.
 - Local credentials are generated in `.env` and excluded from Git and the Docker context.
 
@@ -61,3 +61,94 @@ uv run pytest --run-integration
 For an outage drill, `docker compose stop postgres`, inspect `/health` and `/ready`,
 then `docker compose start postgres` and confirm `/ready` returns 200 again.
 Do not delete volumes to test a transient outage.
+
+# Phase 2 verification
+
+Execution date: **2026-09-09**. Windows host, Python 3.12.13, Docker Desktop Linux
+engine 29.5.2. Spark uses a 1 GB driver heap, two local execution threads and a 3 GB
+container limit. These are configuration values, not benchmark results.
+
+## Verification scope
+
+The phase is checked against both existing development data and a fresh Compose
+project named `pulseforge-phase2-verification`, with new Kafka/PostgreSQL/MinIO
+volumes. Original development volumes are preserved. The full command is:
+
+```sh
+docker compose --profile streaming up -d --build --wait --wait-timeout 240
+uv run pytest --run-integration --run-streaming --junitxml=local-results.xml
+```
+
+The default non-streaming integration command remains available for the foundation.
+CI now builds the streaming image and runs all integration tests, including controlled
+restarts and PostgreSQL outage/recovery, without secrets or paid services.
+
+## Hosted CI result
+
+[Platform CI run 34361432528](https://github.com/kanishk-sc/pulseforge/actions/runs/34361432528)
+completed successfully on implementation/test commit `aac0fee`:
+
+- `python`: formatting, lint, schema export validation and **59 tests passed**.
+- `compose-integration`: fresh Docker builds, healthy Spark stack and **14 integration
+  tests passed**, including all seven streaming acceptance tests. Job logs confirm
+  zero test failures; the other 59 cases were deliberately deselected in this job.
+
+Milestone commits: `54e7049` (foundation cleanup and real producer coverage),
+`1a85b53` (streaming implementation), `aac0fee` (acceptance tests and CI).
+The concluding documentation commit changes no executable code.
+
+## Executed local results
+
+| Check | Actual result |
+| --- | --- |
+| Ruff formatting | 40 files already formatted |
+| Ruff lint | All checks passed |
+| Exported v1 JSON Schema | Matches shared Pydantic model |
+| Non-integration suite | 59 passed; 14 integration tests deselected |
+| Full fresh-volume suite | **73 passed, 0 failed, 0 errors, 0 skipped**, two upstream deprecation warnings |
+| Compose build/start | Spark, API, Kafka, PostgreSQL and MinIO healthy; bootstrap exit 0 |
+| Actual producer → Kafka → Spark | CLI-generated IDs validated by a real consumer and found in committed cleaned/curated data and PostgreSQL |
+| Raw and DLQ | Malformed bytes retained byte-for-byte; malformed and missing-ID reasons reach DLQ; no invalid source tuple in warehouse |
+| Duplicate event | Both Kafka offsets in raw, one cleaned record and one warehouse row |
+| Minute aggregates | Event-type counts and decimal sums match independent SQL aggregation of unique event-time rows |
+| Late event | Old record retained in raw, excluded from live warehouse, explicit watermark-drop diagnostic observed |
+| Restart | All three checkpoint UUIDs retained; new event processed; replayed duplicate remains unique |
+| PostgreSQL outage | Spark exits; failed batch has offsets but no checkpoint commit or DB ledger row; event absent until recovery |
+| Recovery | Restart resumes the same checkpoint and commits the pending event once |
+| Database replay | Repeating the same batch and the same input under another batch does not inflate rows or minute totals |
+
+[Machine-readable results](phase-2-test-results.json) were extracted from the actual
+JUnit XML, retaining all 73 case names and outcome counts. The temporary verification
+containers were removed without deleting their volumes. The original development
+stack was restored and all five long-running services returned healthy.
+
+## Failures found during implementation
+
+- A freshly created partitioned raw source initially had a schema mismatch when its
+  first `ingest_date` partition appeared. Adding the explicit partition field fixed
+  the source schema, and the fresh-volume startup exercises that path.
+- Polling `lastProgress` could miss a stateful batch when Spark immediately committed
+  an empty follow-up batch. A `StreamingQueryListener` now logs every progress event;
+  the late-event test requires the explicit `watermark_dropped=1` diagnostic.
+- Host PostgreSQL connections through `localhost` encountered Windows IPv6 fallback
+  delays. Streaming's host default now matches Compose's IPv4 loopback binding.
+- The actual-producer fixture initially assumed async metadata lookup and omitted
+  random draws made by `next_record`. It now subscribes before inspecting partitions,
+  captures end offsets, and derives expected IDs through the same public generator path.
+- Array-valued event types and non-finite JSON numbers now produce safe validation
+  failures rather than unexpected exceptions in executor code.
+
+## Limits
+
+- This is at-least-once multi-sink execution with idempotent effects, not a distributed
+  exactly-once transaction. DLQ messages can repeat with the same source key.
+- Very late events remain in raw and are reported by the watermark diagnostic, but
+  can be absent from live cleaned/warehouse output. Offline reconciliation is future work.
+- Cleaned/curated readers must honor commit manifests. The inspection CLI does so,
+  but loads the small demo dataset into host memory.
+- One active warehouse writer, single-node Kafka and local Spark are deliberate limits.
+  File compaction and abandoned-generation staging cleanup are not automated.
+- JVM warnings about native Hadoop libraries and object-store sync APIs are visible;
+  they are not proof of HDFS-style atomic rename semantics on object storage.
+- The two pre-existing Starlette/AnyIO deprecation warnings remain visible in Python tests.
+- No throughput, latency-percentile or scalability benchmark was run or claimed.

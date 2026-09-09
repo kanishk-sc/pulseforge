@@ -7,10 +7,10 @@ to reliable operational decisions: preserve the original event, validate its con
 process it once at the sink, model the business, detect explainable anomalies, and
 show the evidence behind an incident.
 
-**Current milestone: Phase 1 — foundation.** Kafka ingestion, realistic event generation,
-PostgreSQL, S3-compatible MinIO, and a health-aware FastAPI service are implemented.
-Spark, dbt, the dashboard, anomaly detection and the AI assistant are planned next;
-they are not represented as working features. All generated data is synthetic.
+**Current milestone: Phase 2 — streaming platform, verified locally and in CI.**
+Kafka ingestion, Spark Structured Streaming, raw/cleaned/curated Parquet, a dead-letter
+pipeline and an idempotent PostgreSQL sink are implemented. dbt, the dashboard,
+anomaly detection and the AI assistant remain future work. All generated data is synthetic.
 
 See the [implementation checklist](docs/architecture/implementation-plan.md) and
 [actual verification record](docs/verification.md).
@@ -24,7 +24,7 @@ target workflow connects those stages without making an LLM responsible for dete
 
 ## Architecture
 
-Solid arrows below describe the foundation. Dashed arrows describe future phases.
+Solid arrows describe implemented paths. Dashed arrows describe future phases.
 
 ```mermaid
 flowchart LR
@@ -34,10 +34,14 @@ flowchart LR
     A[FastAPI liveness and readiness] --> K
     A --> L
     A --> W[(PostgreSQL)]
-    K -. Phase 2 .-> S[Spark Structured Streaming]
-    S -.-> D[Dead-letter topic]
-    S -.-> L
-    S -.-> W
+    K --> S[Spark archive query]
+    S --> RAW[MinIO raw Parquet]
+    RAW --> V[Spark validation and event-time deduplication]
+    V --> D[Kafka dead-letter topic]
+    V --> C[MinIO cleaned / curated Parquet]
+    V --> ST[PostgreSQL JDBC staging]
+    ST --> W
+    W --> M[Minute operational aggregates]
     W -. Phase 3 .-> DBT[dbt facts / dimensions / marts]
     AF[Airflow batch orchestration] -.-> DBT
     DBT -. Phase 4 .-> API[Metrics and incident APIs]
@@ -50,10 +54,11 @@ flowchart LR
 | --- | --- | --- |
 | Contracts / producer | Python, Pydantic, aiokafka | Implemented: versioned validation, journeys, fault injection, confirmed delivery |
 | Event backbone | Kafka in KRaft mode | Implemented: three partitions, event and dead-letter topics, seven-day retention |
-| Database | PostgreSQL, SQLAlchemy, asyncpg | Implemented: persistent local database and readiness; analytical schema follows |
-| Lake | MinIO, boto3 | Implemented: persistent bucket and S3 connectivity; processing writes follow |
+| Database | PostgreSQL, SQLAlchemy, asyncpg, psycopg, JDBC | Unique stream events, transactional batch ledger and minute aggregates |
+| Lake | MinIO, S3A, Parquet | Immutable raw evidence; committed cleaned/curated batches |
 | API | FastAPI | Implemented: liveness, dependency readiness, OpenAPI, request IDs, JSON logs |
-| Processing / modeling | Spark, dbt, Airflow | Phases 2–3 |
+| Streaming | Spark 4.0.1, PySpark, Kafka connector | Event-time deduplication, DLQ, checkpoint recovery and JDBC staging |
+| Modeling | dbt, Airflow | Phase 3 |
 | Product | React, TypeScript, Redis | Phase 4 |
 | Telemetry | Prometheus, Grafana, OpenTelemetry | Phase 5 |
 | Assistant | pgvector, provider abstraction | Phase 6, optional paid provider, offline support |
@@ -91,8 +96,8 @@ or application authentication, and must not be exposed to the Internet.
 | PostgreSQL | localhost:5432 |
 
 Initialization creates `commerce.events.v1`, `commerce.dead-letter.v1`, and the
-`pulseforge` bucket. It is safe to rerun. No analytical migrations are needed yet:
-Phase 1 has no application tables. Phase 2 will introduce versioned warehouse migrations.
+`pulseforge` bucket. It is safe to rerun. Starting streaming also runs the idempotent
+`warehouse.sql` schema initialization; final dimensional modeling belongs to Phase 3.
 
 ### Generate and inspect events
 
@@ -129,9 +134,52 @@ test; use a different seed for a new independent simulation.
 
 `ANOMALY_RATE` controls transport corruption: duplicate records, malformed JSON and
 missing event IDs. Business spikes are separate scenario parameters. Invalid records
-currently enter the event topic intentionally; routing them to the precreated
-dead-letter topic is part of Phase 2. The generator validates good events before
+enter the event topic intentionally; Spark archives them and routes them to the
+dead-letter topic. The generator validates good events before
 serializing them, then corrupts selected bytes deliberately.
+
+### Start and inspect streaming
+
+Spark runs behind a profile so the lightweight API/foundation remains independent.
+Allow Docker approximately 6 GB of memory for the combined platform. The streaming
+container is capped at 3 GB and uses `local[2]`, not a pretend distributed cluster.
+The first image build downloads Spark and its pinned JVM dependencies.
+
+```sh
+docker compose --profile streaming up -d --build --wait --wait-timeout 240
+docker compose logs -f streaming
+docker compose run --rm -e ANOMALY_RATE=0.25 producer python -m pulseforge.producer --count 100
+docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server kafka:29092 --topic commerce.dead-letter.v1 --from-beginning --max-messages 5
+uv run python -m pulseforge.streaming.inspect --layer raw --limit 3
+uv run python -m pulseforge.streaming.inspect --layer cleaned --limit 3
+uv run python -m pulseforge.streaming.inspect --layer curated --limit 3
+docker compose exec postgres psql -U pulseforge -d pulseforge -c "SELECT event_type,count(*) FROM stream_events GROUP BY 1;"
+docker compose exec postgres psql -U pulseforge -d pulseforge -c "SELECT * FROM stream_metrics_minute ORDER BY window_start DESC LIMIT 10;"
+```
+
+The SQL examples use the default local username/database; substitute values from `.env`
+if changed. In MinIO's console, browse the `pulseforge` bucket: `raw/v1`, `cleaned/v1`,
+`curated/v1`, `commits/v1`, and `checkpoints/`. The host inspection command uses PyArrow
+from the development dependencies and reads **committed files only**. It loads the
+small demo dataset into memory; it is not a production query engine. Do not recursively
+scan arbitrary lake files as though in-progress attempts were committed data.
+
+To restart safely without discarding offsets or deduplication state:
+
+```sh
+docker compose stop streaming
+docker compose --profile streaming up -d --wait --wait-timeout 180 streaming
+```
+
+All three checkpoints live in MinIO. Retain the checkpoint and lake metadata together.
+On a correctness-critical sink failure Spark exits; restore the dependency and use the
+same restart command. It does not auto-restart forever and conceal a failed sink.
+
+The ten-minute watermark bounds the live deduplication state. Very late records can be
+excluded from live cleaned/warehouse output; their bytes remain in raw and Spark logs
+the dropped count. Planned offline reconciliation must use the raw archive. Do not
+delete a checkpoint to repair a transient outage. Read [failure semantics](docs/architecture/phase-2-design.md)
+before changing namespaces or planning a backfill.
 
 ### Example API usage
 
@@ -152,13 +200,17 @@ uv run ruff format --check .
 uv run ruff check .
 uv run pytest -m "not integration"
 uv run pytest -m integration --run-integration
+uv run pytest --run-integration --run-streaming
 ```
 
 The second pytest command requires Compose. It verifies Kafka delivery/readback,
 S3 write/read/delete, PostgreSQL transactions, API readiness and repeated bootstrap.
-Integration tests skip by default rather than silently pretending to use real services.
-CI runs lint, unit/API tests, Docker builds and the real Compose integration suite
-without private secrets. Frontend and dbt CI will be added with their implementations.
+The streaming flag additionally exercises actual CLI producer → Spark → lake/warehouse,
+DLQ payload fidelity, duplicates, minute totals, watermark drops, restart and database
+outage/recovery. These tests intentionally stop/restart local services: run against a
+development stack, without another traffic generator. Integration tests skip by default.
+CI builds the Spark image and runs the full integration suite without private secrets.
+Frontend and dbt CI will be added with their implementations.
 
 For host API development, stop the container API first, then run:
 
@@ -186,8 +238,11 @@ explicit denominators and late-arrival handling. See [design decisions](docs/arc
 
 ## Observability and AI
 
-Today, API and producer logs are JSON. API responses include a validated or generated
-request ID. Producer logs distinguish acknowledged events from a failed delivery.
+API, producer and streaming application logs are JSON; Spark's JVM logs retain their
+native diagnostic format. API responses include a validated or generated request ID.
+Producer logs distinguish acknowledged events from a failed delivery. Streaming logs
+report batch input/insert counts and watermark drops. The Spark container health check
+reports live query threads, not an end-to-end latency or freshness guarantee.
 Dependency failures are visible through readiness, independent of API liveness.
 Phase 5 adds metrics and traces after the pipeline has meaningful measurements.
 
@@ -215,7 +270,7 @@ environment, concurrency, throughput, p50/p95/p99 and error rate.
   Python projects would add packaging overhead before independent release cycles exist.
 - No placeholder infrastructure, empty application folders, fake charts or fabricated scores.
 
-Next is Spark validation, dead-letter routing, lake writes and transactional warehouse
-ingestion. Subsequent phases add dbt, Airflow, operational APIs, the dashboard,
+Next is Phase 3: dbt facts/dimensions/marts and Airflow batch orchestration.
+Subsequent phases add operational APIs, the dashboard,
 observability and evidence-based AI. Kubernetes and AWS Terraform follow only after
 the local application works; no paid infrastructure is created automatically.

@@ -3,7 +3,7 @@
 PulseForge is a synthetic commerce/logistics operations platform. Build and verify
 each milestone before expanding its scope. Checkmarks mean verified, not scaffolded.
 
-## 1. Foundation (current milestone)
+## 1. Foundation (complete)
 - [x] Architecture, local setup, failure semantics and repository conventions
 - [x] Versioned Pydantic event contracts for all eight event types
 - [x] Seeded, correlated event generator with explicit anomaly scenarios
@@ -14,13 +14,17 @@ each milestone before expanding its scope. Checkmarks mean verified, not scaffol
 - [x] Lint, tests, image builds and live foundation smoke test
 - [x] Stable foundation commit (`c0b1884`)
 
-## 2. Streaming data platform
-- [ ] Spark Kafka consumer with checkpoints and replay tests
-- [ ] Preserve raw bytes, schema validation and dead-letter reasons
-- [ ] Watermark-aware deduplication plus warehouse uniqueness for durable idempotency
-- [ ] Enrichment and raw/cleaned/curated Parquet on S3-compatible storage
-- [ ] Transactional warehouse writes and window aggregates
-- [ ] Test duplicate replay, malformed payloads, restarts and sink outages
+## 2. Streaming data platform (complete)
+- [x] Spark Kafka consumer with checkpoints and replay tests
+- [x] Preserve raw bytes, schema validation and dead-letter reasons
+- [x] Watermark-aware deduplication plus warehouse uniqueness for durable idempotency
+- [x] Enrichment and raw/cleaned/curated Parquet on S3-compatible storage
+- [x] Transactional warehouse writes and window aggregates
+- [x] Test duplicate replay, malformed payloads, restarts and sink outages
+
+Verified on 2026-09-09: 73 local tests on fresh volumes; hosted CI passed 59
+unit/API/schema tests and 14 live integration tests. See [evidence](../verification.md).
+Phase 3 and later remain unimplemented.
 
 ## 3. Analytics engineering
 - [ ] dbt facts: orders, payments, shipments, refunds
