@@ -158,7 +158,42 @@ services:
     mem_limit: 768m
     restart: "no"
 
+  airflow:
+    image: pulseforge-airflow:local
+    build:
+      context: .
+      dockerfile: infra/docker/airflow.Dockerfile
+    profiles: ["airflow"]
+    command: standalone
+    environment:
+      AIRFLOW_HOME: /opt/airflow/state
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+      AIRFLOW__CORE__DEFAULT_TIMEZONE: UTC
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_USERS: pulseforge:admin
+      AIRFLOW__LOGGING__BASE_LOG_FOLDER: /opt/airflow/state/logs
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-pulseforge}
+      POSTGRES_DB: ${POSTGRES_DB:-pulseforge}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run scripts/init_env.py first}
+      DBT_SCHEMA: ${DBT_SCHEMA:-analytics}
+    ports: ["127.0.0.1:8080:8080"]
+    volumes: ["airflow-state:/opt/airflow/state"]
+    depends_on:
+      postgres: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/api/v2/version"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+    init: true
+    mem_limit: 1536m
+    restart: "no"
+
 volumes:
   postgres-data:
   kafka-data:
   minio-data:
+  airflow-state:
