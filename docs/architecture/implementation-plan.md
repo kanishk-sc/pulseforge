@@ -12,7 +12,7 @@ each milestone before expanding its scope. Checkmarks mean verified, not scaffol
 - [x] FastAPI liveness/readiness, typed responses and request IDs
 - [x] Unit, API, schema and opt-in infrastructure integration tests
 - [x] Lint, tests, image builds and live foundation smoke test
-- [ ] Stable foundation commit
+- [x] Stable foundation commit (`c0b1884`)
 
 ## 2. Streaming data platform
 - [ ] Spark Kafka consumer with checkpoints and replay tests

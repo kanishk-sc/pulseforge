@@ -17,6 +17,9 @@ verification report, not a throughput or latency benchmark.
 | Bounded traffic | `docker compose run --rm -e ANOMALY_RATE=0 -e EVENTS_PER_SECOND=50 producer python -m pulseforge.producer --count 100 --scenario payment-spike` | 100 acknowledged records, exit 0, clean shutdown |
 | Dependency outage | Stop PostgreSQL, query `/health` and `/ready`, restart PostgreSQL | Liveness 200, readiness 503, postgres down; Kafka/storage stayed up |
 
+After restarting PostgreSQL, the full 45-test suite passed again, including readiness.
+Foundation implementation committed as `c0b1884` (`feat: scaffold pulseforge platform`).
+
 The live suite verifies a Kafka event at its acknowledged partition/offset, an S3
 object write/read/delete, a PostgreSQL transaction, repeated initialization and
 full API readiness. It does not substitute mocks for infrastructure. The non-integration
