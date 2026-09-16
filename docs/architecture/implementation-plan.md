@@ -33,10 +33,10 @@ Phase 3 evidence is recorded separately below.
 - [x] Finite Airflow warehouse verification → dbt build → quality-summary DAG; Spark excluded
 - [x] Deterministic populated-warehouse, replay, rerun and real Airflow DAG validation
 
-Verified on 2026-09-09: 62 non-integration tests, 3 deterministic analytics tests,
-108 successful dbt build results, a successful real Airflow DAG run and 79 full local
-tests including every Phase 2 streaming recovery case. The hosted Phase 3 workflow is
-configured but has not yet run. See [design](phase-3-design.md) and
+Re-verified on 2026-09-16: 68 non-integration tests, four deterministic analytics
+tests, 109 successful dbt build results, a successful real Airflow DAG run and 86
+full local tests including every Phase 2 streaming recovery case. Hosted CI passed
+all three jobs after correcting the MinIO registry reference. See [design](phase-3-design.md) and
 [evidence](../verification.md). Phase 4 and later remain unimplemented.
 
 ## 4. Product layer

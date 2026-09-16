@@ -276,3 +276,108 @@ uv run pytest -m analytics --run-integration --run-analytics --basetemp=.pytest_
 For the full Phase 2 plus Phase 3 regression, start the streaming profile and use the
 full regression command above. The tests intentionally stop and restart local services;
 run them only against a development stack without an independent producer.
+
+
+# Phase 3 review and re-verification — 2026-09-16
+
+The existing Phase 3 implementation was reviewed on `phase-3-analytics`, then hardened
+without changing the Phase 1 event contract or Phase 2 ingestion/checkpoint code.
+The full regression below exercised implementation commit `e53eb5c`. The subsequent
+registry-only fix `5d0d3a6` uses the identical MinIO image and passed a fresh foundation
+verification. Historical September 9 results above remain historical evidence.
+
+## Corrections and scope
+
+- Materialize the event staging table once per full build. Dimensions and facts now
+  share a committed source snapshot while Spark continues ingesting.
+- Pass UTC explicitly to all hourly date_trunc expressions, including against a
+  database configured for Asia/Kathmandu. The run-start hook alone did not establish
+  a timezone on every worker connection.
+- Return zero requests per order when there are orders but no requests; retain null
+  when there is no order denominator.
+- Reject multiple shipment creations for one order in a business-rule test, since
+  contract v1 has no independent shipment identifier for unambiguous delay attribution.
+- Fail the quality summary on empty, malformed, skipped, warning or unknown results.
+- Mount the CLI dbt project read-only and write generated artifacts under /tmp in the
+  container, removing the requirement to write to a Linux runner-owned checkout.
+- Correct the minute metric grain (minute/event type, no region) and region spelling
+  in the design documentation. Document partial model publication and serial builds.
+
+## Exact executed commands and observed results
+
+Commands ran in PowerShell. Output redirection to ignored diagnostic logs is omitted.
+
+| Command | Observed result |
+| --- | --- |
+| `uv run ruff format --check .` | 46 files already formatted |
+| `uv run ruff check .` | All checks passed |
+| `uv run python scripts/export_schema.py --check` | Version 1 schema matches Pydantic |
+| `uv run pytest -m "not integration" --basetemp=.pytest_cache/unit-tmp` | 68 passed; 18 integration cases deselected |
+| `docker compose --profile analytics build analytics-dbt` | Exit 0 |
+| `docker compose --profile analytics run --rm analytics-dbt parse` | Exit 0 |
+| `docker compose --profile analytics run --rm analytics-dbt compile` | Exit 0 |
+| `docker compose --profile analytics run --rm analytics-dbt build` | 14 models, 94 data tests, one hook: PASS=109, WARN=0, ERROR=0, SKIP=0 |
+| `docker compose --profile analytics run --rm analytics-dbt test` | 94 tests and one hook: PASS=95, WARN=0, ERROR=0, SKIP=0 |
+| `uv run pytest -m analytics --run-integration --run-analytics --basetemp=.pytest_cache/analytics-tmp` | 4 passed in 45.81 seconds; subsequent full run also covered the added zero-denominator fixture |
+| `docker compose --profile streaming up -d --build --wait --wait-timeout 240` | Exit 0; healthy streaming stack |
+| `uv run pytest --run-integration --run-streaming --run-analytics --basetemp=.pytest_cache/full-tmp --junitxml=phase3-review-results.xml` | **86 passed, 0 failures, 0 errors, 0 skipped**, 235.17 seconds; two existing upstream warnings |
+| `docker compose --profile airflow build airflow` | Exit 0 |
+| `docker compose --profile airflow run --rm --no-deps airflow python /opt/pulseforge/scripts/verify_airflow_dag.py` | Zero import errors; expected three-task linear DAG |
+| `docker compose --profile airflow up -d --build --wait --wait-timeout 180 airflow` | Exit 0; healthy service |
+| `docker compose exec airflow airflow dags test pulseforge_analytics 2026-09-16T15:00:00+00:00` | Exit 0; all three tasks and DAG successful; summary reports 94 pass, 15 success, zero failed |
+| `docker compose --profile analytics run --rm --no-deps -e POSTGRES_PORT=1 analytics-dbt debug` | Expected nonzero exit on unavailable PostgreSQL endpoint; no service stopped |
+| `docker compose config --quiet` | Exit 0 |
+| `docker compose up -d --build --wait --wait-timeout 180` | Exit 0, including after the registry correction |
+| `uv run pytest tests/test_integration.py --run-integration --basetemp=.pytest_cache/quay-tmp` | 5 passed in 26.32 seconds after registry correction |
+| `git diff --check` | No whitespace errors |
+
+[Machine-readable case results](phase-3-test-results.json) are extracted from the
+actual full-run JUnit XML. The 86 cases comprise 68 non-integration tests, four analytics
+acceptance tests and the existing 14 foundation/streaming integration tests.
+
+The deterministic analytics fixture starts with 12 events and exact revenue USD 380,
+two east payment attempts with one failure (rate 0.5), and two created shipments.
+Replaying a UUID inserts zero events. An interleaved subsequent ingestion adds a late
+order, a later shipment delay and a refund request in a region/hour without orders.
+Downstream work using the already-captured staging table still sees four orders;
+a full rebuild sees five, updates the existing shipment delay, keeps revenue at USD
+380 and yields null for the request/order ratio without orders. A deliberately
+corrupted analytics payment status makes the actual dbt test fail; a full rebuild
+repairs it while the source retains exactly 15 events. All four contract regions are
+represented after the late arrivals. The temporary test database is dropped afterward.
+
+## Registry failure discovered by hosted CI
+
+The first hosted run on `e53eb5c` failed before starting streaming tests because Docker
+Hub denied access to `minio/minio`. The same pinned release is available through
+[MinIO's documented Quay registry](https://github.com/minio/minio/blob/master/docs/docker/README.md).
+The correction changes only the registry reference to
+`quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z`. Locally, inspecting both tags returned
+the identical image ID `sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e`.
+No volumes, ports, settings, checkpoints or storage semantics changed.
+
+[Hosted run 35117743583](https://github.com/kanishk-sc/pulseforge/actions/runs/35117743583)
+completed successfully on `5d0d3a6`:
+
+- Python: formatting, lint, schema verification and **68 passed** (3.02 seconds).
+- Analytics: fresh image builds, dbt compilation, real DAG import and **4 passed**
+  against populated PostgreSQL (52.08 seconds).
+- Foundation/streaming: fresh stack startup and **14 passed** (92.53 seconds).
+  The four analytics cases were intentionally skipped here and passed in their
+  dedicated job; the 68 non-integration cases were deselected.
+
+Implementation commits already present at review start were `9f658ea` (dbt),
+`9c26881` (Airflow), `d0bbe71` (tests/CI), and `0b8c226` (initial verification docs).
+Review corrections are `6a9aeed` (snapshot/metrics/acceptance), `e53eb5c` (quality
+summary), and `5d0d3a6` (registry). The concluding documentation commit does not
+change executable code. No merge to main was performed.
+
+## Remaining operational limits
+
+Models publish independently; a failing test does not atomically roll back the entire
+analytics schema. Use successful build results and serialize manual builds with Airflow
+for each target schema. Late events excluded by Spark's watermark remain raw-only and
+cannot be recovered by dbt. Shipment cohort attribution requires one creation per order;
+unmatched delays remain source evidence. Full source rescans, local SQLite Airflow
+metadata, the shared development PostgreSQL role and single-node services remain
+intentional development limits. No performance benchmark or Phase 4 feature is claimed.

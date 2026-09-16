@@ -84,7 +84,9 @@ checkpoint alone cannot provide exactly-once behavior across multiple external s
 Write each sink idempotently and reconcile partial progress on replay. Avoid claiming
 a distributed transaction between Kafka, Parquet and PostgreSQL.
 
-dbt staging preserves the complete Phase 2 event and minute-metric sources in UTC.
+dbt staging preserves the complete Phase 2 event source in a table snapshot and
+exposes minute metrics as a view. Downstream models share the captured event set
+while Spark continues ingesting. Hour bucketing explicitly uses UTC.
 Type 1 dimensions represent observed customer/product IDs and the four contract regions.
 Facts represent order creation, payment results, shipment creation and refund requests,
 with every row linked to its source event UUID. A shipment delay updates attributes on

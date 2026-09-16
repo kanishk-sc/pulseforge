@@ -198,8 +198,14 @@ docker compose --profile analytics run --rm analytics-dbt test
 
 `dbt build` is the normal command because it runs models and tests in dependency
 order. Running `dbt test` separately is useful after inspecting or changing data.
-Facts merge on their source event UUID; repeating a run or replaying an accepted UUID
+The event staging table captures one committed source snapshot per full build.
+Events accepted afterward enter the next build. Facts merge on their source event UUID;
+repeating a run or replaying an accepted UUID
 does not increase the fact grain. Accepted late arrivals are included on the next run.
+Run one analytics build per target schema at a time, including manual runs alongside
+Airflow. The project is mounted read-only; CLI target artifacts and logs live in the
+short-lived container under `/tmp/dbt-target` and `/tmp/dbt-logs`. Standard output
+remains available to the caller. Airflow retains its own build artifacts for the summary.
 
 Airflow is also optional. It runs the same finite build every hour and never starts,
 stops or retries Spark:
@@ -256,8 +262,8 @@ development stack, without another traffic generator. Integration tests skip by 
 The analytics flag creates a disposable database with the exact Phase 2 schema, loads
 deterministic events through the real sink, runs dbt twice and checks exact facts,
 marts, lineage and replay stability. CI keeps the Python, streaming and analytics jobs
-independent and requires no private secrets. The Phase 3 hosted CI result is not claimed
-until that workflow has run on GitHub.
+independent and requires no private secrets. All three jobs passed in
+[Phase 3 hosted CI](https://github.com/kanishk-sc/pulseforge/actions/runs/35117743583).
 
 For host API development, stop the container API first, then run:
 
