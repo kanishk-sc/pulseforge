@@ -8,11 +8,15 @@ from pathlib import Path
 
 def summarize(path: Path) -> dict[str, object]:
     payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("dbt results must be an object")
     results = payload.get("results")
-    if not isinstance(results, list):
-        raise ValueError("dbt run_results.json does not contain a results list")
+    if not isinstance(results, list) or not results:
+        raise ValueError("dbt run_results.json does not contain a nonempty results list")
+    if any(not isinstance(result, dict) for result in results):
+        raise ValueError("dbt result entries must be objects")
     statuses = Counter(str(result.get("status", "unknown")) for result in results)
-    failed = sum(statuses[status] for status in ("error", "fail", "runtime error"))
+    failed = sum(count for status, count in statuses.items() if status not in {"pass", "success"})
     return {
         "invocation_id": payload.get("metadata", {}).get("invocation_id"),
         "result_count": len(results),

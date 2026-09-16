@@ -39,3 +39,21 @@ def test_summarize_rejects_missing_results(tmp_path):
     path.write_text("{}", encoding="utf-8")
     with pytest.raises(ValueError, match="results list"):
         summarize(path)
+
+
+@pytest.mark.parametrize("statuses", [[], ["skipped"], ["warn"], ["unknown"]])
+def test_summary_does_not_report_incomplete_build_as_success(tmp_path, statuses):
+    path = write_results(tmp_path, statuses)
+    if not statuses:
+        with pytest.raises(ValueError, match="nonempty"):
+            summarize(path)
+    else:
+        assert summarize(path)["failed"] == 1
+
+
+@pytest.mark.parametrize("payload", [[], {"results": [None]}])
+def test_summary_rejects_malformed_results(tmp_path, payload):
+    path = tmp_path / "run_results.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="object"):
+        summarize(path)
