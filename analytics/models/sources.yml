@@ -4,8 +4,8 @@ sources:
   - name: streaming_warehouse
     description: >-
       Phase 2-owned PostgreSQL relations. dbt reads these sources but never creates,
-      migrates, truncates, or writes them. Timestamps are timestamptz values and dbt
-      sessions run in UTC.
+      migrates, truncates, or writes them. Timestamps retain their timestamptz type;
+      downstream hourly metrics explicitly bucket in UTC.
     schema: public
     tables:
       - name: stream_events

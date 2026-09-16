@@ -3,9 +3,10 @@ version: 2
 models:
   - name: stg_stream_events
     description: >-
-      Typed, lossless view of the Phase 2 durable event table. Grain is one logical
+      Typed, lossless table snapshot of the Phase 2 durable event table. Grain is one logical
       event per event_id. Event, source, and ingestion timestamps remain separate;
-      all timestamptz values are rendered in UTC by the dbt session.
+      hourly metrics explicitly bucket timestamptz values in UTC. Arrivals after this
+      table is captured enter downstream models on the next full build.
     columns:
       - name: event_id
         description: Contract event UUID.

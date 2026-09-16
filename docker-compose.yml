@@ -151,7 +151,9 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-pulseforge}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run scripts/init_env.py first}
       DBT_SCHEMA: ${DBT_SCHEMA:-analytics}
-    volumes: ["./analytics:/app/analytics"]
+      DBT_TARGET_PATH: /tmp/dbt-target
+      DBT_LOG_PATH: /tmp/dbt-logs
+    volumes: ["./analytics:/app/analytics:ro"]
     depends_on:
       postgres: {condition: service_healthy}
     init: true

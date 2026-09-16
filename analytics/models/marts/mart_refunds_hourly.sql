@@ -1,5 +1,5 @@
 select
-    date_trunc('hour', refund_requested_at) as refund_request_hour_utc,
+    date_trunc('hour', refund_requested_at, 'UTC') as refund_request_hour_utc,
     region_key,
     region_code,
     count(*)::bigint as refund_request_count,

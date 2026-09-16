@@ -1,5 +1,5 @@
 select
-    date_trunc('hour', payment_event_ts) as payment_hour_utc,
+    date_trunc('hour', payment_event_ts, 'UTC') as payment_hour_utc,
     region_key,
     region_code,
     count(*)::bigint as payment_attempt_count,

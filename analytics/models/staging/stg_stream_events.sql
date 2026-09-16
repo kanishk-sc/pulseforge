@@ -1,3 +1,6 @@
+{{ config(materialized='table') }}
+
+-- Freeze one committed source snapshot for this build's dimensions and facts.
 select
     schema_version::integer as schema_version,
     event_id::uuid as event_id,

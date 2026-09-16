@@ -6,3 +6,9 @@
 .pytest_cache
 .ruff_cache
 node_modules
+analytics/target
+analytics/logs
+analytics/dbt_packages
+analytics/.user.yml
+*.log
+*-results.xml

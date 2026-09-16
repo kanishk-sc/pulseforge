@@ -1,5 +1,5 @@
 select
-    date_trunc('hour', shipment_created_at) as shipment_creation_hour_utc,
+    date_trunc('hour', shipment_created_at, 'UTC') as shipment_creation_hour_utc,
     region_key,
     region_code,
     count(*)::bigint as shipment_created_count,

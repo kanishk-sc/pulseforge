@@ -1,5 +1,5 @@
 with grain as (
-    select date_trunc('hour', order_created_at) as metric_hour_utc, region_key, region_code
+    select date_trunc('hour', order_created_at, 'UTC') as metric_hour_utc, region_key, region_code
     from {{ ref('fct_orders') }}
     union
     select revenue_hour_utc, region_key, region_code from {{ ref('mart_revenue_hourly') }}
@@ -16,7 +16,7 @@ with grain as (
 
 orders as (
     select
-        date_trunc('hour', order_created_at) as metric_hour_utc,
+        date_trunc('hour', order_created_at, 'UTC') as metric_hour_utc,
         region_key,
         count(*)::bigint as order_count
     from {{ ref('fct_orders') }}
@@ -40,7 +40,7 @@ select
     coalesce(refunds.refund_request_count, 0)::bigint as refund_request_count,
     coalesce(refunds.requested_amount, 0)::numeric(24, 2) as refund_requested_amount,
     (
-        refunds.refund_request_count::numeric / nullif(orders.order_count, 0)
+        coalesce(refunds.refund_request_count, 0)::numeric / nullif(orders.order_count, 0)
     )::numeric(12, 6) as refund_requests_per_order
 from grain
 left join orders using (metric_hour_utc, region_key)

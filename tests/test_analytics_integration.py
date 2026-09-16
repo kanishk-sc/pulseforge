@@ -126,13 +126,15 @@ def deterministic_events() -> list[CommerceEvent]:
     ]
 
 
-def insert_stage_rows(connection, name: str, events: list[CommerceEvent]) -> None:
+def insert_stage_rows(
+    connection, name: str, events: list[CommerceEvent], offset_start: int = 0
+) -> None:
     statement = sql.SQL("INSERT INTO {} ({}) VALUES ({})").format(
         sql.Identifier(name),
         sql.SQL(",").join(map(sql.Identifier, EVENT_COLUMNS)),
         sql.SQL(",").join(sql.Placeholder() for _ in EVENT_COLUMNS),
     )
-    for offset, source_event in enumerate(events):
+    for offset, source_event in enumerate(events, start=offset_start):
         ingested_at = source_event.timestamp + timedelta(minutes=1)
         row = validate_payload(source_event.model_dump_json().encode(), ingested_at)["event"]
         row.update(
@@ -145,7 +147,7 @@ def insert_stage_rows(connection, name: str, events: list[CommerceEvent]) -> Non
         connection.execute(statement, [row[column] for column in EVENT_COLUMNS])
 
 
-def run_dbt(database: str, schema: str) -> str:
+def run_dbt(database: str, schema: str, *arguments: str, expected_success: bool = True) -> str:
     result = subprocess.run(
         [
             "docker",
@@ -159,13 +161,13 @@ def run_dbt(database: str, schema: str) -> str:
             "-e",
             f"DBT_SCHEMA={schema}",
             "analytics-dbt",
-            "build",
+            *(arguments or ("build",)),
         ],
         capture_output=True,
         text=True,
         timeout=180,
     )
-    assert result.returncode == 0, result.stdout + result.stderr
+    assert (result.returncode == 0) == expected_success, result.stdout + result.stderr
     return result.stdout
 
 
@@ -176,6 +178,12 @@ def analytics_database():
     admin_settings = StreamSettings()
     with connect(admin_settings) as admin:
         admin.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(database)))
+        # Fractional UTC offset exposes accidental session-dependent hourly bucketing.
+        admin.execute(
+            sql.SQL("ALTER DATABASE {} SET timezone TO 'Asia/Kathmandu'").format(
+                sql.Identifier(database)
+            )
+        )
     settings = StreamSettings(postgres_db=database)
     try:
         events = deterministic_events()
@@ -233,6 +241,11 @@ def test_exact_hourly_business_metrics(analytics_database):
         f'SELECT refund_request_count,requested_amount FROM "{marts}".mart_refunds_hourly',
     )
     assert refunds == [(1, Decimal("30.00"))]
+    assert fetchall(
+        settings,
+        f'SELECT refund_requests_per_order FROM "{marts}".mart_operations_health_hourly '
+        "WHERE metric_hour_utc='2026-09-08 11:00:00+00' AND region_code='us-east'",
+    ) == [(Decimal("0.000000"),)]
 
 
 def test_fact_grains_dimensions_and_shipment_semantics(analytics_database):
@@ -277,3 +290,76 @@ def test_replay_and_repeated_build_do_not_inflate_analytics(analytics_database):
         f'(SELECT sum(revenue_amount) FROM "{marts}".mart_revenue_hourly)',
     )
     assert before == after == [(12, 4, Decimal("380.00"))]
+
+
+def test_snapshot_late_arrivals_and_quality_failure(analytics_database):
+    settings, schema = analytics_database
+    core, marts = f"{schema}_core", f"{schema}_marts"
+    late_events = [
+        event(
+            13, EventType.ORDER_CREATED, datetime(2026, 9, 8, 9, tzinfo=UTC), 5, "eu-west", "25.00"
+        ),
+        event(
+            14,
+            EventType.SHIPMENT_DELAYED,
+            datetime(2026, 9, 8, 12, tzinfo=UTC),
+            3,
+            "us-west",
+            shipment_provider="fedex",
+        ),
+        event(
+            15,
+            EventType.REFUND_REQUESTED,
+            datetime(2026, 9, 8, 12, tzinfo=UTC),
+            6,
+            "ap-south",
+            "5.00",
+        ),
+    ]
+    with connect(settings) as connection:
+        name = stage_name("analytics-late", 0)
+        prepare_stage(connection, name)
+        insert_stage_rows(connection, name, late_events, offset_start=12)
+        assert commit_stage(connection, name, "analytics-late", 0) == 3
+
+    # Deterministic interleaving: ingestion commits after staging, before downstream work.
+    run_dbt(settings.postgres_db, schema, "build", "--exclude", "stg_stream_events")
+    assert fetchall(settings, f'SELECT count(*) FROM "{core}".fct_orders') == [(4,)]
+    run_dbt(settings.postgres_db, schema)
+    assert fetchall(settings, f'SELECT count(*) FROM "{core}".fct_orders') == [(5,)]
+    assert fetchall(
+        settings,
+        f'SELECT delay_event_count,was_delayed FROM "{core}".fct_shipments '
+        "WHERE order_id='order-3'",
+    ) == [(1, True)]
+    assert fetchall(
+        settings,
+        f"SELECT payment_failure_rate,refund_requests_per_order FROM "
+        f"\"{marts}\".mart_operations_health_hourly WHERE region_code='eu-west'",
+    ) == [(None, Decimal("0.000000"))]
+    assert fetchall(
+        settings,
+        f"SELECT order_count,refund_request_count,refund_requests_per_order FROM "
+        f"\"{marts}\".mart_operations_health_hourly WHERE region_code='ap-south'",
+    ) == [(0, 1, None)]
+    assert fetchall(settings, f'SELECT sum(revenue_amount) FROM "{marts}".mart_revenue_hourly') == [
+        (Decimal("380.00"),)
+    ]
+    # A real failing data test returns nonzero without modifying the ingestion source.
+    with connect(settings) as connection:
+        connection.execute(
+            sql.SQL("UPDATE {}.fct_payment_attempts SET status='invalid'").format(
+                sql.Identifier(core)
+            )
+        )
+    output = run_dbt(
+        settings.postgres_db,
+        schema,
+        "test",
+        "--select",
+        "assert_payment_status_matches_event_type",
+        expected_success=False,
+    )
+    assert "FAIL" in output
+    assert fetchall(settings, "SELECT count(*) FROM stream_events") == [(15,)]
+    run_dbt(settings.postgres_db, schema)
