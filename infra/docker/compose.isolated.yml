@@ -11,3 +11,5 @@ services:
     ports: !reset []
   spark:
     ports: !reset []
+  airflow:
+    ports: !reset []

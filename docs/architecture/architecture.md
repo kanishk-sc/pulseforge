@@ -58,9 +58,12 @@ metrics. A ten-minute event-time watermark bounds duplicate state. PostgreSQL pr
 and unique constraints remain the durable idempotency boundary because Spark cannot
 atomically commit Kafka offsets, object storage and PostgreSQL together.
 
-Airflow will schedule finite work: dbt builds, quality reporting, runbook ingestion,
-aggregation and retention cleanup. It will not loop as the streaming consumer. Spark
-checkpoints own streaming progress; Airflow task retries own batch recovery.
+Airflow schedules finite work: source-freshness checks, ordered dbt builds, quality
+reporting and bounded retention cleanup. It does not loop as the streaming consumer.
+Spark checkpoints own streaming progress; Airflow task retries own batch recovery.
+The local Airflow deployment uses SQLite and the standalone executor for a reproducible
+single-machine demo. A production deployment needs an external metadata database,
+distributed execution, authentication and separately scoped service credentials.
 
 ## Lake layers and AWS portability
 

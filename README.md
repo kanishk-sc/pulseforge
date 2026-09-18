@@ -10,9 +10,10 @@ show the evidence behind an incident.
 **Current milestone: Phase 3 — analytics engineering.** The Phase 1 foundation now
 feeds a Spark Structured Streaming application that validates and deduplicates events,
 routes rejected records, archives raw and cleaned Parquet, and writes idempotent event
-and minute-metric tables to PostgreSQL. dbt now builds tested facts, dimensions and
-hourly marts from those rows. Airflow, the dashboard, anomaly detection and the AI
-assistant remain planned; they are not represented as working features.
+and minute-metric tables to PostgreSQL. dbt builds tested facts, dimensions and hourly
+marts from those rows. Airflow schedules freshness checks, ordered dbt transformations,
+quality artifacts and dry-run-first lake retention. The dashboard, anomaly detection
+and AI assistant remain planned; they are not represented as working features.
 All generated data is synthetic.
 
 See the [implementation checklist](docs/architecture/implementation-plan.md) and
@@ -42,7 +43,8 @@ flowchart LR
     S --> L
     S --> W
     W --> DBT[dbt facts / dimensions / marts]
-    AF[Airflow batch orchestration] -.-> DBT
+    AF[Airflow batch orchestration] --> DBT
+    AF --> L
     DBT -. Phase 4 .-> API[Metrics and incident APIs]
     API -.-> UI[React operations dashboard]
     RAG[Phase 6: evidence-based assistant] -.-> API
@@ -58,7 +60,7 @@ flowchart LR
 | API | FastAPI | Implemented: liveness, dependency readiness, OpenAPI, request IDs, JSON logs |
 | Processing | Spark Structured Streaming | Implemented: validation, watermark deduplication, DLQ routing and checkpoints |
 | Modeling | dbt-postgres | Implemented: event facts, observed dimensions, hourly business and quality marts |
-| Orchestration | Airflow | Remaining Phase 3 work |
+| Orchestration | Airflow | Implemented: analytics, quality-report and retention DAGs |
 | Product | React, TypeScript, Redis | Phase 4 |
 | Telemetry | Prometheus, Grafana, OpenTelemetry | Phase 5 |
 | Assistant | pgvector, provider abstraction | Phase 6, optional paid provider, offline support |
@@ -95,6 +97,7 @@ or application authentication, and must not be exposed to the Internet.
 | Kafka bootstrap | localhost:9092 |
 | PostgreSQL | localhost:5432 |
 | Spark streaming UI | http://localhost:4040 (while the streaming profile is running) |
+| Airflow | http://localhost:8080 (while the orchestration profile is running) |
 
 Initialization creates `commerce.events.v1`, `commerce.dead-letter.v1`, and the
 `pulseforge` bucket. It is safe to rerun. The Spark application creates its two
@@ -139,6 +142,23 @@ Facts preserve event grain: payment rows are attempts, shipment delays are signa
 refunds are requests rather than completed refunds. Expected orphan relationships caused
 by deliberate transport corruption are warnings and are also materialized in
 `analytics_dbt.mart_data_quality_hourly`; they are never filtered away to make tests green.
+
+### Run scheduled analytics
+
+Start the local Airflow standalone service explicitly:
+
+```sh
+docker compose --profile orchestration up -d --build airflow
+docker compose logs airflow
+```
+
+The first log output includes the generated local administrator password. The three
+DAGs verify source freshness and build/test dbt models every 15 minutes, write an
+hourly JSON quality summary from dbt's actual `run_results.json`, and inspect lake
+objects daily for retention. Retention is a dry run by default; set
+`LAKE_RETENTION_DRY_RUN=false` only after reviewing the candidate policy. Airflow does
+not own the long-running Spark consumer. This SQLite-backed standalone configuration
+is for local demonstration, not a production control plane.
 
 ### Generate and inspect events
 
@@ -206,8 +226,8 @@ The integration command requires the streaming Compose profile. It verifies Kafk
 delivery/readback, S3 write/read/delete, PostgreSQL transactions, API readiness,
 repeated bootstrap, and valid/invalid events across every Spark sink.
 Integration tests skip by default rather than silently pretending to use real services.
-CI runs lint, unit/API tests, Docker builds and the real Compose integration suite
-without private secrets. Frontend and dbt CI will be added with their implementations.
+CI runs lint, unit/API tests, Docker builds, the real Compose integration suite, dbt,
+Airflow import validation and all three Airflow DAG test runs without private secrets.
 
 For host API development, stop the container API first, then run:
 
@@ -229,11 +249,11 @@ alone cannot express all of those checks; consumers must use the runtime validat
 
 The stream warehouse uses event-grain staging with `event_id` and Kafka-position
 uniqueness. Transactional staging cleanup plus `ON CONFLICT DO NOTHING` makes retrying
-a partially failed microbatch safe. The planned dbt layer adds customer/product/region
-dimensions and business facts for orders/payments/shipments/refunds. Those facts will
-retain source event references. dbt marts will calculate hourly revenue,
-payment failure rates, shipment performance, refunds and operational health, with
-explicit denominators and late-arrival handling. See [design decisions](docs/architecture/architecture.md).
+a partially failed microbatch safe. The dbt layer adds customer/product/region
+dimensions and business facts for orders/payments/shipments/refunds while retaining
+source event references. Its marts calculate hourly revenue, payment failure rates,
+shipment performance, refunds, operational health and data-quality signals with
+explicit denominators. See [design decisions](docs/architecture/architecture.md).
 
 ## Observability and AI
 
@@ -266,6 +286,6 @@ environment, concurrency, throughput, p50/p95/p99 and error rate.
   Python projects would add packaging overhead before independent release cycles exist.
 - No placeholder infrastructure, empty application folders, fake charts or fabricated scores.
 
-Next is Airflow orchestration over the populated stream warehouse. Subsequent phases add operational APIs, the dashboard,
-observability and evidence-based AI. Kubernetes and AWS Terraform follow only after
+Next are operational APIs and the dashboard. Subsequent phases add observability and
+evidence-based AI. Kubernetes and AWS Terraform follow only after
 the local application works; no paid infrastructure is created automatically.

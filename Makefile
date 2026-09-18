@@ -1,4 +1,4 @@
-.PHONY: setup up down traffic streaming analytics lint test integration
+.PHONY: setup up down traffic streaming analytics orchestration lint test integration
 setup:
 	uv sync --frozen
 	uv run python scripts/init_env.py
@@ -13,6 +13,8 @@ streaming:
 analytics:
 	docker compose --profile analytics run --rm dbt deps --profiles-dir .
 	docker compose --profile analytics run --rm dbt build --profiles-dir . --target dev
+orchestration:
+	docker compose --profile orchestration up -d --build airflow
 lint:
 	uv run ruff format --check .
 	uv run ruff check .

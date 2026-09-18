@@ -29,9 +29,9 @@ each milestone before expanding its scope. Checkmarks mean verified, not scaffol
 - [x] dbt facts: orders, payment attempts, shipment events and refund requests
 - [x] Dimensions: customer, product, region; marts: revenue, failures, shipments, refunds, health and data quality
 - [x] dbt relationships, uniqueness, accepted values and business-rule tests
-- [ ] Airflow transformations, quality reports, ingestion, aggregation and cleanup DAGs
+- [x] Airflow ingestion-freshness, transformations, quality reporting, aggregation and retention DAGs
 - [x] Execute dbt against populated warehouse (55 pass, 2 intentional relationship warnings)
-- [ ] Validate Airflow DAG imports and task execution against the local stack
+- [x] Validate all Airflow DAG imports and task execution against the local stack
 
 ## 4. Product layer
 - [ ] Typed metrics, incident, pipeline and quality APIs

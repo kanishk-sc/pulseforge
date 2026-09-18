@@ -104,3 +104,22 @@ left five payment attempts and three shipment events without their order-created
 Relationship tests report those rows at warning severity, while
 `mart_data_quality_hourly` persists their counts by hour and region. The modeled revenue
 reconciled to the stream aggregate at USD 4,683.30 across 17 successful payments.
+
+## Phase 3 Airflow verification
+
+Executed on **2026-09-18** against the populated isolated stack with Apache Airflow
+3.3.2 and dbt Core 1.12.5. The custom Airflow image built successfully and `pip check`
+reported no broken requirements. Database migration and DAG reserialization succeeded;
+`airflow dags list-import-errors --output json` returned an empty list and all three
+DAGs were registered.
+
+| DAG | Observed execution result |
+| --- | --- |
+| `pulseforge_analytics_pipeline` | Four tasks succeeded: source freshness, staging/dimension/fact build, mart build and 43 dbt tests (41 pass, 2 expected warnings) |
+| `pulseforge_data_quality_report` | Two tasks succeeded and wrote `artifacts/quality/20260918T202124Z.json` from dbt's real run-results artifact (41 pass, 2 warnings, no failures) |
+| `pulseforge_lake_retention` | Task succeeded in the default dry-run mode with 0 expired candidates and 0 deletions |
+
+The DAG runs used actual PostgreSQL and MinIO services. The retention result proves the
+safe no-delete default and execution path; it is not evidence that deletion of expired
+objects has been exercised. Airflow standalone uses SQLite locally and is not presented
+as a highly available production deployment.
