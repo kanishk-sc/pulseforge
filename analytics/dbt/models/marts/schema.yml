@@ -1,0 +1,45 @@
+version: 2
+
+models:
+  - name: mart_data_quality_hourly
+    description: Orphan downstream events retained as explicit quality signals after transport corruption.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [metric_hour, region]
+  - name: mart_revenue_hourly
+    description: Successful payment revenue by event hour and region.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [metric_hour, region]
+    columns:
+      - name: successful_revenue
+        data_tests: [not_null]
+  - name: mart_payment_failure_hourly
+    description: Failed attempts divided by all payment attempts by event hour and region.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [metric_hour, region]
+    columns:
+      - name: payment_failure_rate
+        data_tests: [not_null]
+  - name: mart_shipment_performance_hourly
+    description: Shipment creation and delay-signal counts; delay signal ratio is not a delivery SLA.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [metric_hour, region]
+  - name: mart_refunds_hourly
+    description: Refund requests and requested amounts; not completed refunds.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [metric_hour, region]
+  - name: mart_operational_health_hourly
+    description: Cross-domain operational rollup with explicit counts and source freshness.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [metric_hour, region]

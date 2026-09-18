@@ -1,0 +1,21 @@
+version: 2
+
+models:
+  - name: stg_stream_events
+    description: Typed event grain used by every downstream model.
+    columns:
+      - name: event_id
+        data_tests: [not_null, unique]
+      - name: schema_version
+        data_tests:
+          - accepted_values:
+              arguments: {values: [1]}
+      - name: region
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments: {values: [us-east, us-west, eu-west, ap-south]}
+      - name: currency
+        data_tests:
+          - accepted_values:
+              arguments: {values: [USD]}

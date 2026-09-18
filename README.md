@@ -7,11 +7,12 @@ to reliable operational decisions: preserve the original event, validate its con
 process it once at the sink, model the business, detect explainable anomalies, and
 show the evidence behind an incident.
 
-**Current milestone: Phase 2 — streaming data platform.** The Phase 1 foundation now
+**Current milestone: Phase 3 — analytics engineering.** The Phase 1 foundation now
 feeds a Spark Structured Streaming application that validates and deduplicates events,
 routes rejected records, archives raw and cleaned Parquet, and writes idempotent event
-and minute-metric tables to PostgreSQL. dbt, Airflow, the dashboard, anomaly detection
-and the AI assistant remain planned; they are not represented as working features.
+and minute-metric tables to PostgreSQL. dbt now builds tested facts, dimensions and
+hourly marts from those rows. Airflow, the dashboard, anomaly detection and the AI
+assistant remain planned; they are not represented as working features.
 All generated data is synthetic.
 
 See the [implementation checklist](docs/architecture/implementation-plan.md) and
@@ -40,7 +41,7 @@ flowchart LR
     S --> D[Dead-letter topic]
     S --> L
     S --> W
-    W -. Phase 3 .-> DBT[dbt facts / dimensions / marts]
+    W --> DBT[dbt facts / dimensions / marts]
     AF[Airflow batch orchestration] -.-> DBT
     DBT -. Phase 4 .-> API[Metrics and incident APIs]
     API -.-> UI[React operations dashboard]
@@ -56,7 +57,8 @@ flowchart LR
 | Lake | MinIO, boto3, Parquet | Implemented: lossless raw and validated cleaned stream archives |
 | API | FastAPI | Implemented: liveness, dependency readiness, OpenAPI, request IDs, JSON logs |
 | Processing | Spark Structured Streaming | Implemented: validation, watermark deduplication, DLQ routing and checkpoints |
-| Modeling / orchestration | dbt, Airflow | Phase 3 |
+| Modeling | dbt-postgres | Implemented: event facts, observed dimensions, hourly business and quality marts |
+| Orchestration | Airflow | Remaining Phase 3 work |
 | Product | React, TypeScript, Redis | Phase 4 |
 | Telemetry | Prometheus, Grafana, OpenTelemetry | Phase 5 |
 | Assistant | pgvector, provider abstraction | Phase 6, optional paid provider, offline support |
@@ -121,6 +123,22 @@ Inspect the stream outputs:
 docker compose exec postgres psql -U pulseforge -d pulseforge -c "TABLE analytics.stream_metrics_minute;"
 docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server kafka:29092 --topic commerce.dead-letter.v1 --from-beginning --max-messages 5
 ```
+
+### Build analytics models
+
+The analytics profile runs dbt in a pinned container, so a host dbt installation is
+optional. It builds 14 models and 43 tests against the populated stream warehouse:
+
+```sh
+docker compose --profile analytics build dbt
+docker compose --profile analytics run --rm dbt deps --profiles-dir .
+docker compose --profile analytics run --rm dbt build --profiles-dir . --target dev
+```
+
+Facts preserve event grain: payment rows are attempts, shipment delays are signals, and
+refunds are requests rather than completed refunds. Expected orphan relationships caused
+by deliberate transport corruption are warnings and are also materialized in
+`analytics_dbt.mart_data_quality_hourly`; they are never filtered away to make tests green.
 
 ### Generate and inspect events
 
@@ -248,7 +266,6 @@ environment, concurrency, throughput, p50/p95/p99 and error rate.
   Python projects would add packaging overhead before independent release cycles exist.
 - No placeholder infrastructure, empty application folders, fake charts or fabricated scores.
 
-Next is dbt modeling and Airflow orchestration over the populated stream warehouse.
-Subsequent phases add operational APIs, the dashboard,
+Next is Airflow orchestration over the populated stream warehouse. Subsequent phases add operational APIs, the dashboard,
 observability and evidence-based AI. Kubernetes and AWS Terraform follow only after
 the local application works; no paid infrastructure is created automatically.

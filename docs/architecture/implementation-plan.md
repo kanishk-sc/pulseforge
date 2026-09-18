@@ -26,11 +26,12 @@ each milestone before expanding its scope. Checkmarks mean verified, not scaffol
 - [ ] Curated Parquet models (Phase 3 owns business semantics and transform versioning)
 
 ## 3. Analytics engineering
-- [ ] dbt facts: orders, payments, shipments, refunds
-- [ ] Dimensions: customer, product, region; marts: revenue, failures, shipments, refunds, health
-- [ ] dbt relationships, uniqueness, accepted values and business-rule tests
+- [x] dbt facts: orders, payment attempts, shipment events and refund requests
+- [x] Dimensions: customer, product, region; marts: revenue, failures, shipments, refunds, health and data quality
+- [x] dbt relationships, uniqueness, accepted values and business-rule tests
 - [ ] Airflow transformations, quality reports, ingestion, aggregation and cleanup DAGs
-- [ ] Execute dbt and DAG validation against populated warehouse
+- [x] Execute dbt against populated warehouse (55 pass, 2 intentional relationship warnings)
+- [ ] Validate Airflow DAG imports and task execution against the local stack
 
 ## 4. Product layer
 - [ ] Typed metrics, incident, pipeline and quality APIs

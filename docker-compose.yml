@@ -145,6 +145,22 @@ services:
     stop_grace_period: 45s
     restart: unless-stopped
 
+  dbt:
+    image: pulseforge-dbt:local
+    build:
+      context: .
+      dockerfile: infra/docker/dbt.Dockerfile
+    profiles: ["analytics"]
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-pulseforge}
+      POSTGRES_DB: ${POSTGRES_DB:-pulseforge}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run scripts/init_env.py first}
+    volumes: ["./analytics/dbt:/workspace"]
+    depends_on:
+      postgres: {condition: service_healthy}
+
 volumes:
   postgres-data:
   kafka-data:

@@ -16,6 +16,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+  "dbt-postgres==1.11.0",
   "pyspark==3.5.9",
   "pytest>=8.3,<10",
   "pytest-asyncio>=0.25,<2",

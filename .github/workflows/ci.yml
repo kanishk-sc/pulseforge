@@ -31,6 +31,9 @@ jobs:
       - run: docker compose config --quiet
       - run: docker compose --profile streaming up -d --build --wait --wait-timeout 240
       - run: uv run pytest -m integration --run-integration
+      - run: docker compose --profile analytics build dbt
+      - run: docker compose --profile analytics run --rm dbt deps --profiles-dir .
+      - run: docker compose --profile analytics run --rm dbt build --profiles-dir . --target dev
       - if: failure()
         run: docker compose logs --no-color --tail 100
       - if: always()

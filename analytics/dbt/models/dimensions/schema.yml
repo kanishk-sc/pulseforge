@@ -1,0 +1,18 @@
+version: 2
+
+models:
+  - name: dim_customers
+    description: Type-1 observed customer dimension derived from synthetic events.
+    columns:
+      - name: customer_id
+        data_tests: [not_null, unique]
+  - name: dim_products
+    description: Type-1 observed product dimension derived from synthetic events.
+    columns:
+      - name: product_id
+        data_tests: [not_null, unique]
+  - name: dim_regions
+    description: Low-cardinality observed region dimension.
+    columns:
+      - name: region
+        data_tests: [not_null, unique]

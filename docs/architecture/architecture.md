@@ -91,11 +91,13 @@ checkpoint alone cannot provide exactly-once behavior across multiple external s
 Write each sink idempotently and reconcile partial progress on replay. Avoid claiming
 a distributed transaction between Kafka, Parquet and PostgreSQL.
 
-dbt staging normalizes source events; dimensions represent customer, product and region.
-Facts represent orders, payment attempts, shipment events and refund requests. Event
+dbt staging normalizes source events; implemented dimensions represent customer, product
+and region. Facts represent orders, payment attempts, shipment events and refund requests. Event
 grain must remain explicit: a shipment delay is not another shipment, and a refund
 request is not a completed refund. Marts must name those semantics and define the
-denominator of every rate. Initial dimensions can use Type 1 updates; historical
+denominator of every rate. Hourly marts currently cover revenue, payment failures,
+shipment signals, refund requests, operational health and orphan-event quality. Initial
+dimensions use Type 1 observed rollups; historical
 attribute tracking should be introduced only when a real analytical question needs it.
 
 ## API, caching and failures

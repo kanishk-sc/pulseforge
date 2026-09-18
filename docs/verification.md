@@ -92,3 +92,15 @@ and restart recovery remain manual smoke procedures; rejected records are intent
 dead-letter topic; the single local Spark driver is not a production cluster; curated
 business models and compaction belong to Phase 3. Hosted GitHub Actions status is not
 claimed because this verification ran locally.
+
+## Phase 3 dbt verification
+
+Executed on **2026-09-18** against the same populated isolated PostgreSQL warehouse.
+dbt Core 1.12.5 with dbt-postgres 1.11.0 built 14 models and ran 43 data tests.
+The result was **55 pass, 2 warnings, 0 errors, 0 skips** across 57 operations.
+
+The warnings are evidence rather than ignored failures: deliberate upstream corruption
+left five payment attempts and three shipment events without their order-created event.
+Relationship tests report those rows at warning severity, while
+`mart_data_quality_hourly` persists their counts by hour and region. The modeled revenue
+reconciled to the stream aggregate at USD 4,683.30 across 17 successful payments.
