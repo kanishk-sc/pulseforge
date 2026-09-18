@@ -3,7 +3,7 @@
 ## Scope and constraints
 
 PulseForge uses entirely synthetic commerce/logistics data. Phase 1 establishes a
-working ingestion boundary and the dependencies needed for processing. The seven-phase
+working ingestion boundary and a verified streaming processor. The seven-phase
 [plan](implementation-plan.md) distinguishes implemented code from future architecture.
 The design prioritizes reproducibility, explicit failure behavior and useful tests.
 
@@ -39,42 +39,54 @@ quantity. Unknown fields and unsupported versions fail validation rather than si
 changing meaning. Replay older than 2020 is outside this synthetic contract.
 
 Schemas alone do not detect duplicate delivery or plausible-but-wrong business values.
-Phase 2 will track those at the stream/sink boundaries. Duplicates must be measured,
+Spark tracks duplicates at the stream boundary and PostgreSQL enforces durable event
+and source-position uniqueness. Duplicates must be measured,
 not confused with malformed records. Large transactions remain valid; detection is a
 business decision rather than a schema rule. JSON Schema is generated from the model,
 but cross-field/time-dependent checks remain runtime Python validation.
 
-## Streaming versus batch, and Spark's role (planned)
+## Streaming versus batch, and Spark's role
 
-Spark Structured Streaming will handle continual microbatches from Kafka, event-time
-windows, enrichment and checkpointed offsets. It is chosen to demonstrate distributed
+Spark Structured Streaming handles continual microbatches from Kafka, event-time
+windows, processing-latency enrichment and checkpointed offsets. It is chosen to demonstrate distributed
 processing semantics and unified Parquet transformations, not because the local
 generator requires a cluster. A simpler consumer would be cheaper at this local scale.
+
+Five independently checkpointed queries archive every raw Kafka value, publish rejected
+records, archive accepted records, upsert event rows and upsert one-minute regional
+metrics. A ten-minute event-time watermark bounds duplicate state. PostgreSQL primary
+and unique constraints remain the durable idempotency boundary because Spark cannot
+atomically commit Kafka offsets, object storage and PostgreSQL together.
 
 Airflow will schedule finite work: dbt builds, quality reporting, runbook ingestion,
 aggregation and retention cleanup. It will not loop as the streaming consumer. Spark
 checkpoints own streaming progress; Airflow task retries own batch recovery.
 
-## Lake layers and AWS portability (planned processing)
+## Lake layers and AWS portability
 
-The foundation provisions the `pulseforge` S3-compatible bucket. Phase 2 will write:
+The foundation provisions the `pulseforge` S3-compatible bucket. Streaming writes:
 
 | Prefix | Meaning | Replay/quality behavior |
 | --- | --- | --- |
 | `raw/` | Original Kafka payload plus topic, partition, offset and ingest timestamp | Preserve malformed bytes too; never silently discard evidence |
 | `cleaned/` | Valid, normalized, enriched events in Parquet | Keep schema version and event ID; explicit rejection reasons elsewhere |
-| `curated/` | Business-oriented aggregates in Parquet | Rebuildable from cleaned data with transform version |
+| `curated/` | Planned business-oriented aggregates | Phase 3 will make these rebuildable from cleaned data with transform versions |
 
-Use event date/type partitions, bounded file counts and eventual compaction. Avoid
+Raw data is partitioned by ingestion date/topic; cleaned data by event date/type. The
+raw archive retains binary bytes, decoded text, Kafka coordinates and validation output.
+Use bounded file counts and eventual compaction. Avoid
 high-cardinality IDs in paths. A single endpoint/region/bucket configuration keeps
 application code portable; production S3 should use workload roles rather than static
 MinIO root keys. Phase 1 uses local credentials only; IAM support belongs with AWS
 deployment work. MinIO is pinned to a published community image for the local demo;
 review upstream security fixes and licensing before any production deployment.
 
-## Warehouse modeling (planned)
+## Warehouse ingestion and planned modeling
 
-Store durable event IDs with a unique constraint and use transactional upserts. Spark's
+The stream sink stores durable event IDs with a primary key and source positions with a
+unique constraint. Each microbatch first loads an unlogged staging table, then merges
+and clears that batch in one PostgreSQL transaction. Metrics upsert on minute and region.
+Spark's
 checkpoint alone cannot provide exactly-once behavior across multiple external sinks.
 Write each sink idempotently and reconcile partial progress on replay. Avoid claiming
 a distributed transaction between Kafka, Parquet and PostgreSQL.

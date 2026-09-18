@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     postgres_password: SecretStr = SecretStr("")
     kafka_bootstrap_servers: str = "localhost:9092"
     kafka_topic: str = "commerce.events.v1"
+    kafka_dead_letter_topic: str = "commerce.dead-letter.v1"
     s3_endpoint_url: str = "http://localhost:9000"
     minio_root_user: str = "pulseforge"
     minio_root_password: SecretStr = SecretStr("")

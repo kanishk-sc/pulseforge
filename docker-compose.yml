@@ -111,7 +111,42 @@ services:
     stop_grace_period: 45s
     restart: "no"
 
+  spark:
+    image: pulseforge-spark:local
+    build:
+      context: .
+      dockerfile: infra/docker/spark.Dockerfile
+    profiles: ["streaming"]
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-pulseforge}
+      POSTGRES_DB: ${POSTGRES_DB:-pulseforge}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run scripts/init_env.py first}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      KAFKA_TOPIC: commerce.events.v1
+      KAFKA_DEAD_LETTER_TOPIC: commerce.dead-letter.v1
+      S3_ENDPOINT_URL: http://minio:9000
+      S3_BUCKET: pulseforge
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-pulseforge}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Run scripts/init_env.py first}
+      SPARK_CHECKPOINT_ROOT: /opt/spark/checkpoints
+      SPARK_WATERMARK_DELAY: ${SPARK_WATERMARK_DELAY:-10 minutes}
+      SPARK_TRIGGER_INTERVAL: ${SPARK_TRIGGER_INTERVAL:-10 seconds}
+      SPARK_MAX_OFFSETS_PER_TRIGGER: ${SPARK_MAX_OFFSETS_PER_TRIGGER:-10000}
+      SPARK_SHUFFLE_PARTITIONS: ${SPARK_SHUFFLE_PARTITIONS:-4}
+    ports: ["127.0.0.1:4040:4040"]
+    volumes: ["spark-checkpoints:/opt/spark/checkpoints"]
+    depends_on:
+      postgres: {condition: service_healthy}
+      minio: {condition: service_healthy}
+      bootstrap: {condition: service_completed_successfully}
+    init: true
+    stop_grace_period: 45s
+    restart: unless-stopped
+
 volumes:
   postgres-data:
   kafka-data:
   minio-data:
+  spark-checkpoints:

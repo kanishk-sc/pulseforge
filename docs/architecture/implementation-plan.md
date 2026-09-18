@@ -3,7 +3,7 @@
 PulseForge is a synthetic commerce/logistics operations platform. Build and verify
 each milestone before expanding its scope. Checkmarks mean verified, not scaffolded.
 
-## 1. Foundation (current milestone)
+## 1. Foundation
 - [x] Architecture, local setup, failure semantics and repository conventions
 - [x] Versioned Pydantic event contracts for all eight event types
 - [x] Seeded, correlated event generator with explicit anomaly scenarios
@@ -15,12 +15,15 @@ each milestone before expanding its scope. Checkmarks mean verified, not scaffol
 - [x] Stable foundation commit (`c0b1884`)
 
 ## 2. Streaming data platform
-- [ ] Spark Kafka consumer with checkpoints and replay tests
-- [ ] Preserve raw bytes, schema validation and dead-letter reasons
-- [ ] Watermark-aware deduplication plus warehouse uniqueness for durable idempotency
-- [ ] Enrichment and raw/cleaned/curated Parquet on S3-compatible storage
-- [ ] Transactional warehouse writes and window aggregates
-- [ ] Test duplicate replay, malformed payloads, restarts and sink outages
+- [x] Spark Kafka consumer with independent checkpoints and verified restart recovery
+- [x] Preserve raw bytes, strict schema validation and stable dead-letter reasons
+- [x] Watermark-aware deduplication plus warehouse uniqueness for durable idempotency
+- [x] Processing-latency enrichment and raw/cleaned Parquet on S3-compatible storage
+- [x] Transactional warehouse writes and one-minute regional aggregates
+- [x] Test transformations and live Kafka-to-PostgreSQL/MinIO/dead-letter delivery
+- [x] Manually verify deterministic duplicate replay and checkpoint restart recovery
+- [ ] Automate deliberate sink-outage drills
+- [ ] Curated Parquet models (Phase 3 owns business semantics and transform versioning)
 
 ## 3. Analytics engineering
 - [ ] dbt facts: orders, payments, shipments, refunds

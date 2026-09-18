@@ -1,4 +1,4 @@
-# Phase 1 verification
+# Verification record
 
 Executed on **2026-09-09** on Windows with Docker Desktop's Linux engine
 (Docker Engine 29.5.2), Python 3.12.13 and uv 0.11.16. This is a functional
@@ -61,3 +61,34 @@ uv run pytest --run-integration
 For an outage drill, `docker compose stop postgres`, inspect `/health` and `/ready`,
 then `docker compose start postgres` and confirm `/ready` returns 200 again.
 Do not delete volumes to test a transient outage.
+
+## Phase 2 streaming verification
+
+Executed on **2026-09-18** on Windows with Docker Desktop's Linux engine, Spark 3.5.9,
+Python 3.12.13 and an isolated Kafka/PostgreSQL/MinIO stack. This is a correctness
+smoke test, not a throughput benchmark.
+
+| Check | Observed result |
+| --- | --- |
+| Formatting and lint | Ruff format check and lint passed |
+| Spark transformations | 7 Spark tests passed, including non-UTF-8 raw-byte preservation |
+| Full non-infrastructure suite | 47 tests passed; 6 infrastructure tests deselected |
+| Container build | Pinned Spark image and Kafka/PostgreSQL/S3 connector resolution succeeded |
+| Initial bounded stream | 200 Kafka inputs produced 179 unique accepted rows and 15 dead-letter records |
+| Event sink integrity | 179 rows, 179 distinct IDs, zero persisted duplicates |
+| Minute metrics | 179 events, 39 payment attempts, 22 failures and USD 4,683.30 successful revenue |
+| Lake output | Raw and cleaned Parquet objects were written to isolated MinIO storage |
+| Automated all-sink path | Opt-in integration test delivered a valid event to PostgreSQL/cleaned MinIO and an invalid event to raw MinIO/dead-letter Kafka |
+| Deterministic replay | Replayed the same 200 IDs; event and metric counts remained unchanged; raw evidence and DLQ records increased |
+| Checkpoint restart | Forced a Spark container recreation; five queries resumed without errors and counts remained unchanged |
+
+The failure/recovery path also exposed a real warehouse defect: staging represented UUID
+and JSON values as text, while the final table required `uuid` and `jsonb`. The merge now
+casts those values explicitly. Restarting from the unchanged checkpoint retried the batch,
+loaded all 179 valid events and left no duplicate event IDs.
+
+Current limits: the all-sink delivery path is automated, but deliberate sink outages
+and restart recovery remain manual smoke procedures; rejected records are intentionally replayable and therefore at-least-once in the
+dead-letter topic; the single local Spark driver is not a production cluster; curated
+business models and compaction belong to Phase 3. Hosted GitHub Actions status is not
+claimed because this verification ran locally.

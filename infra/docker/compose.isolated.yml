@@ -1,0 +1,13 @@
+# Optional override for running an isolated validation stack while the normal local stack is up.
+# Docker Compose's !reset tag removes host port bindings; access services with docker compose exec.
+services:
+  postgres:
+    ports: !reset []
+  kafka:
+    ports: !reset []
+  minio:
+    ports: !reset []
+  api:
+    ports: !reset []
+  spark:
+    ports: !reset []

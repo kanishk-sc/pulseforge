@@ -15,7 +15,12 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["pytest>=8.3,<10", "pytest-asyncio>=0.25,<2", "ruff>=0.11,<1"]
+dev = [
+  "pyspark==3.5.9",
+  "pytest>=8.3,<10",
+  "pytest-asyncio>=0.25,<2",
+  "ruff>=0.11,<1",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/pulseforge"]
@@ -30,4 +35,7 @@ select = ["E", "F", "I", "UP", "B", "ASYNC"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
-markers = ["integration: requires the running Docker Compose foundation"]
+markers = [
+  "integration: requires the running Docker Compose foundation",
+  "spark: exercises local Spark transformations",
+]
