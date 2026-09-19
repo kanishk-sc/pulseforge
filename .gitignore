@@ -6,6 +6,7 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .ruff_cache/
+.planning/
 .coverage
 htmlcov/
 *.egg-info/
@@ -24,4 +25,5 @@ frontend/vite.config.d.ts
 *.log
 artifacts/dbt-logs/
 artifacts/dbt-target/
+artifacts/quality/
 .DS_Store
