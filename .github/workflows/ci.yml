@@ -12,10 +12,27 @@ jobs:
           version: "0.11.16"
           python-version: "3.12"
       - run: uv sync --frozen
+      - run: uv run python scripts/init_env.py
       - run: uv run ruff format --check .
       - run: uv run ruff check .
       - run: uv run python scripts/export_schema.py --check
       - run: uv run pytest -m "not integration"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+        working-directory: frontend
+      - run: npm audit --audit-level=high
+        working-directory: frontend
+      - run: npm run typecheck
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend
+      - run: docker compose --profile streaming build spark
+      - run: docker compose --profile product build dashboard
+      - run: docker compose --profile observability config --quiet
   compose-integration:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -28,8 +45,19 @@ jobs:
       - run: uv sync --frozen
       - run: uv run python scripts/init_env.py
       - run: docker compose config --quiet
-      - run: docker compose up -d --build --wait --wait-timeout 180
+      - run: docker compose --profile streaming up -d --build --wait --wait-timeout 240
       - run: uv run pytest -m integration --run-integration
+      - run: docker compose --profile analytics build dbt
+      - run: docker compose --profile analytics run --rm dbt deps --profiles-dir .
+      - run: docker compose --profile analytics run --rm dbt build --profiles-dir . --target dev
+      - run: docker compose --profile orchestration build airflow
+      - run: docker compose --profile orchestration run --rm airflow bash -lc "pip check"
+      - run: docker compose --profile orchestration run --rm airflow db migrate
+      - run: docker compose --profile orchestration run --rm airflow dags reserialize
+      - run: docker compose --profile orchestration run --rm airflow dags list-import-errors --output json
+      - run: docker compose --profile orchestration run --rm airflow dags test pulseforge_analytics_pipeline
+      - run: docker compose --profile orchestration run --rm airflow dags test pulseforge_data_quality_report
+      - run: docker compose --profile orchestration run --rm airflow dags test pulseforge_lake_retention
       - if: failure()
         run: docker compose logs --no-color --tail 100
       - if: always()

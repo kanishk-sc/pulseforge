@@ -1,0 +1,24 @@
+version: 2
+
+sources:
+  - name: stream
+    schema: analytics
+    tables:
+      - name: stream_events
+        description: Validated, deduplicated event grain written by Spark.
+        loaded_at_field: processed_at
+        config:
+          freshness:
+            warn_after: {count: 30, period: minute}
+            error_after: {count: 24, period: hour}
+        columns:
+          - name: event_id
+            data_tests: [not_null, unique]
+          - name: event_type
+            data_tests:
+              - not_null
+              - accepted_values:
+                  arguments:
+                    values: [customer_login, order_created, payment_processed, payment_failed, shipment_created, shipment_delayed, refund_requested, inventory_updated]
+          - name: source_offset
+            data_tests: [not_null]

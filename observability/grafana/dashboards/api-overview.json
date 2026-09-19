@@ -1,0 +1,45 @@
+{
+  "annotations": {"list": []},
+  "editable": false,
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "API request rate",
+      "targets": [
+        {"expr": "sum(rate(pulseforge_http_requests_total[5m])) by (route, status)", "legendFormat": "{{route}} {{status}}"}
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+    },
+    {
+      "type": "timeseries",
+      "title": "API p95 latency",
+      "targets": [
+        {"expr": "histogram_quantile(0.95, sum(rate(pulseforge_http_request_duration_seconds_bucket[5m])) by (le, route))", "legendFormat": "{{route}}"}
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+    },
+    {
+      "type": "timeseries",
+      "title": "Redis cache outcomes",
+      "targets": [
+        {"expr": "sum(rate(pulseforge_cache_operations_total[5m])) by (operation, result)", "legendFormat": "{{operation}} {{result}}"}
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+    },
+    {
+      "type": "stat",
+      "title": "Warehouse query failures",
+      "targets": [
+        {"expr": "sum(increase(pulseforge_analytics_query_failures_total[1h]))", "legendFormat": "failures"}
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+    }
+  ],
+  "schemaVersion": 41,
+  "tags": ["pulseforge"],
+  "templating": {"list": []},
+  "time": {"from": "now-6h", "to": "now"},
+  "title": "PulseForge API Overview",
+  "uid": "pulseforge-api-overview",
+  "version": 1
+}

@@ -3,7 +3,7 @@
 PulseForge is a synthetic commerce/logistics operations platform. Build and verify
 each milestone before expanding its scope. Checkmarks mean verified, not scaffolded.
 
-## 1. Foundation (current milestone)
+## 1. Foundation
 - [x] Architecture, local setup, failure semantics and repository conventions
 - [x] Versioned Pydantic event contracts for all eight event types
 - [x] Seeded, correlated event generator with explicit anomaly scenarios
@@ -15,30 +15,37 @@ each milestone before expanding its scope. Checkmarks mean verified, not scaffol
 - [x] Stable foundation commit (`c0b1884`)
 
 ## 2. Streaming data platform
-- [ ] Spark Kafka consumer with checkpoints and replay tests
-- [ ] Preserve raw bytes, schema validation and dead-letter reasons
-- [ ] Watermark-aware deduplication plus warehouse uniqueness for durable idempotency
-- [ ] Enrichment and raw/cleaned/curated Parquet on S3-compatible storage
-- [ ] Transactional warehouse writes and window aggregates
-- [ ] Test duplicate replay, malformed payloads, restarts and sink outages
+- [x] Spark Kafka consumer with independent checkpoints and verified restart recovery
+- [x] Preserve raw bytes, strict schema validation and stable dead-letter reasons
+- [x] Watermark-aware deduplication plus warehouse uniqueness for durable idempotency
+- [x] Processing-latency enrichment and raw/cleaned Parquet on S3-compatible storage
+- [x] Transactional warehouse writes and one-minute regional aggregates
+- [x] Test transformations and live Kafka-to-PostgreSQL/MinIO/dead-letter delivery
+- [x] Manually verify deterministic duplicate replay and checkpoint restart recovery
+- [ ] Automate deliberate sink-outage drills
+- [ ] Curated Parquet models (Phase 3 owns business semantics and transform versioning)
 
 ## 3. Analytics engineering
-- [ ] dbt facts: orders, payments, shipments, refunds
-- [ ] Dimensions: customer, product, region; marts: revenue, failures, shipments, refunds, health
-- [ ] dbt relationships, uniqueness, accepted values and business-rule tests
-- [ ] Airflow transformations, quality reports, ingestion, aggregation and cleanup DAGs
-- [ ] Execute dbt and DAG validation against populated warehouse
+- [x] dbt facts: orders, payment attempts, shipment events and refund requests
+- [x] Dimensions: customer, product, region; marts: revenue, failures, shipments, refunds, health and data quality
+- [x] dbt relationships, uniqueness, accepted values and business-rule tests
+- [x] Airflow ingestion-freshness, transformations, quality reporting, aggregation and retention DAGs
+- [x] Execute dbt against populated warehouse (55 pass, 2 intentional relationship warnings)
+- [x] Validate all Airflow DAG imports and task execution against the local stack
 
 ## 4. Product layer
-- [ ] Typed metrics, incident, pipeline and quality APIs
-- [ ] Redis cache with bounded TTL and graceful cache failure
+- [x] Typed metrics, pipeline and quality APIs backed by dbt marts
+- [x] Redis cache with bounded TTL and graceful cache failure
+- [ ] Persisted incident API
 - [ ] Explainable anomaly detectors with minimum samples and baseline evidence
-- [ ] React/TypeScript dashboard, polling, empty/error states and critical UI tests
+- [x] React/TypeScript dashboard, polling, typed data, and loading/empty/error states
+- [ ] Critical component and browser UI tests
 - [ ] End-to-end anomaly → persisted incident → dashboard demonstration
 
 ## 5. Observability and reliability
-- [ ] Prometheus, Grafana, OpenTelemetry and correlation across services
-- [ ] Lag, throughput, processing latency, errors, quality and anomaly telemetry
+- [x] Prometheus API metrics, provisioned Grafana dashboard and optional FastAPI OpenTelemetry export
+- [x] API latency/errors, cache outcomes, warehouse failures and modeled throughput/quality views
+- [ ] Kafka consumer lag, Spark-native processing and anomaly telemetry
 - [ ] Load tests, failure drills and actual benchmark artifacts with environment metadata
 
 ## 6. AI operations
@@ -50,8 +57,9 @@ each milestone before expanding its scope. Checkmarks mean verified, not scaffol
 
 ## 7. Deployment engineering — gated on working local platform
 - [ ] Kubernetes deployments/services/config/probes/resources for owned services
-- [ ] Terraform managed AWS architecture; validation only, never automatic apply
-- [ ] Cost guidance, production security, recovery and scaling documentation
+- [x] Terraform AWS target for ECS, ALB, RDS, ElastiCache, S3, ECR, IAM and logs; validated but never applied
+- [x] Demo cost trade-offs, production security gaps and state/deletion safeguards documented
+- [ ] Recovery drills, autoscaling policy and measured capacity guidance
 
 ## Verification policy
 Run Ruff format/check and pytest after code changes. Run relevant services and record

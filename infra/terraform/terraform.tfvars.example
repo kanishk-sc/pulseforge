@@ -1,0 +1,4 @@
+aws_region        = "us-east-1"
+availability_zones = ["us-east-1a", "us-east-1b"]
+api_image          = "123456789012.dkr.ecr.us-east-1.amazonaws.com/pulseforge-demo-api@sha256:replace-me"
+dashboard_image    = "123456789012.dkr.ecr.us-east-1.amazonaws.com/pulseforge-demo-dashboard@sha256:replace-me"

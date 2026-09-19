@@ -14,9 +14,24 @@ x-app: &app
     S3_ENDPOINT_URL: http://minio:9000
     MINIO_ROOT_USER: ${MINIO_ROOT_USER:-pulseforge}
     MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Run scripts/init_env.py first}
+    REDIS_URL: redis://redis:6379/0
+    ANALYTICS_CACHE_TTL_SECONDS: ${ANALYTICS_CACHE_TTL_SECONDS:-60}
+    OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
   init: true
 
 services:
+  redis:
+    image: redis:7.4.7-alpine
+    command: redis-server --appendonly yes
+    ports: ["127.0.0.1:6379:6379"]
+    volumes: ["redis-data:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
   postgres:
     image: postgres:16.9-bookworm
     environment:
@@ -62,7 +77,7 @@ services:
     restart: unless-stopped
 
   minio:
-    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
     command: server /data --console-address :9001
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-pulseforge}
@@ -111,7 +126,145 @@ services:
     stop_grace_period: 45s
     restart: "no"
 
+  spark:
+    image: pulseforge-spark:local
+    build:
+      context: .
+      dockerfile: infra/docker/spark.Dockerfile
+    profiles: ["streaming"]
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-pulseforge}
+      POSTGRES_DB: ${POSTGRES_DB:-pulseforge}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run scripts/init_env.py first}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      KAFKA_TOPIC: commerce.events.v1
+      KAFKA_DEAD_LETTER_TOPIC: commerce.dead-letter.v1
+      S3_ENDPOINT_URL: http://minio:9000
+      S3_BUCKET: pulseforge
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-pulseforge}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Run scripts/init_env.py first}
+      SPARK_CHECKPOINT_ROOT: /opt/spark/checkpoints
+      SPARK_WATERMARK_DELAY: ${SPARK_WATERMARK_DELAY:-10 minutes}
+      SPARK_TRIGGER_INTERVAL: ${SPARK_TRIGGER_INTERVAL:-10 seconds}
+      SPARK_MAX_OFFSETS_PER_TRIGGER: ${SPARK_MAX_OFFSETS_PER_TRIGGER:-10000}
+      SPARK_SHUFFLE_PARTITIONS: ${SPARK_SHUFFLE_PARTITIONS:-4}
+    ports: ["127.0.0.1:4040:4040"]
+    volumes: ["spark-checkpoints:/opt/spark/checkpoints"]
+    depends_on:
+      postgres: {condition: service_healthy}
+      minio: {condition: service_healthy}
+      bootstrap: {condition: service_completed_successfully}
+    init: true
+    stop_grace_period: 45s
+    restart: unless-stopped
+
+  dbt:
+    image: pulseforge-dbt:local
+    build:
+      context: .
+      dockerfile: infra/docker/dbt.Dockerfile
+    profiles: ["analytics"]
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-pulseforge}
+      POSTGRES_DB: ${POSTGRES_DB:-pulseforge}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run scripts/init_env.py first}
+    volumes: ["./analytics/dbt:/workspace"]
+    depends_on:
+      postgres: {condition: service_healthy}
+
+  airflow-init:
+    image: pulseforge-airflow:local
+    profiles: ["orchestration"]
+    user: "0:0"
+    entrypoint: /bin/bash
+    command: -c "mkdir -p /opt/airflow/state /opt/airflow/artifacts && chown -R 50000:0 /opt/airflow/state /opt/airflow/artifacts"
+    volumes:
+      - "airflow-state:/opt/airflow/state"
+      - "./artifacts:/opt/airflow/artifacts"
+    restart: "no"
+
+  airflow:
+    image: pulseforge-airflow:local
+    build:
+      context: .
+      dockerfile: infra/docker/airflow.Dockerfile
+    profiles: ["orchestration"]
+    command: standalone
+    environment:
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: sqlite:////opt/airflow/state/airflow.db
+      DBT_LOG_PATH: /opt/airflow/artifacts/dbt-logs
+      DBT_TARGET_PATH: /opt/airflow/artifacts/dbt-target
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-pulseforge}
+      POSTGRES_DB: ${POSTGRES_DB:-pulseforge}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run scripts/init_env.py first}
+      S3_ENDPOINT_URL: http://minio:9000
+      S3_BUCKET: pulseforge
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-pulseforge}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Run scripts/init_env.py first}
+      LAKE_RETENTION_DAYS: ${LAKE_RETENTION_DAYS:-30}
+      LAKE_RETENTION_DRY_RUN: ${LAKE_RETENTION_DRY_RUN:-true}
+    ports: ["127.0.0.1:8080:8080"]
+    volumes:
+      - "./orchestration/dags:/opt/airflow/dags"
+      - "./analytics/dbt:/opt/pulseforge/dbt"
+      - "./artifacts:/opt/airflow/artifacts"
+      - "airflow-state:/opt/airflow/state"
+    depends_on:
+      airflow-init: {condition: service_completed_successfully}
+      postgres: {condition: service_healthy}
+      minio: {condition: service_healthy}
+    restart: unless-stopped
+
+  dashboard:
+    image: pulseforge-dashboard:local
+    build:
+      context: ./frontend
+    profiles: ["product"]
+    ports: ["127.0.0.1:5173:80"]
+    depends_on:
+      api: {condition: service_healthy}
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    profiles: ["observability"]
+    command: ["--config.file=/etc/prometheus/prometheus.yml"]
+    ports: ["127.0.0.1:9090:9090"]
+    volumes:
+      - "./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro"
+    depends_on:
+      api: {condition: service_healthy}
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:12.1.1
+    profiles: ["observability"]
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-pulseforge-local-only}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports: ["127.0.0.1:3000:3000"]
+    volumes:
+      - "./observability/grafana/provisioning:/etc/grafana/provisioning:ro"
+      - "./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro"
+      - "grafana-data:/var/lib/grafana"
+    depends_on:
+      prometheus: {condition: service_started}
+    restart: unless-stopped
+
 volumes:
   postgres-data:
   kafka-data:
   minio-data:
+  spark-checkpoints:
+  airflow-state:
+  redis-data:
+  grafana-data:

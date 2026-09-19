@@ -3,7 +3,7 @@
 ## Scope and constraints
 
 PulseForge uses entirely synthetic commerce/logistics data. Phase 1 establishes a
-working ingestion boundary and the dependencies needed for processing. The seven-phase
+working ingestion boundary and a verified streaming processor. The seven-phase
 [plan](implementation-plan.md) distinguishes implemented code from future architecture.
 The design prioritizes reproducibility, explicit failure behavior and useful tests.
 
@@ -39,51 +39,68 @@ quantity. Unknown fields and unsupported versions fail validation rather than si
 changing meaning. Replay older than 2020 is outside this synthetic contract.
 
 Schemas alone do not detect duplicate delivery or plausible-but-wrong business values.
-Phase 2 will track those at the stream/sink boundaries. Duplicates must be measured,
+Spark tracks duplicates at the stream boundary and PostgreSQL enforces durable event
+and source-position uniqueness. Duplicates must be measured,
 not confused with malformed records. Large transactions remain valid; detection is a
 business decision rather than a schema rule. JSON Schema is generated from the model,
 but cross-field/time-dependent checks remain runtime Python validation.
 
-## Streaming versus batch, and Spark's role (planned)
+## Streaming versus batch, and Spark's role
 
-Spark Structured Streaming will handle continual microbatches from Kafka, event-time
-windows, enrichment and checkpointed offsets. It is chosen to demonstrate distributed
+Spark Structured Streaming handles continual microbatches from Kafka, event-time
+windows, processing-latency enrichment and checkpointed offsets. It is chosen to demonstrate distributed
 processing semantics and unified Parquet transformations, not because the local
 generator requires a cluster. A simpler consumer would be cheaper at this local scale.
 
-Airflow will schedule finite work: dbt builds, quality reporting, runbook ingestion,
-aggregation and retention cleanup. It will not loop as the streaming consumer. Spark
-checkpoints own streaming progress; Airflow task retries own batch recovery.
+Five independently checkpointed queries archive every raw Kafka value, publish rejected
+records, archive accepted records, upsert event rows and upsert one-minute regional
+metrics. A ten-minute event-time watermark bounds duplicate state. PostgreSQL primary
+and unique constraints remain the durable idempotency boundary because Spark cannot
+atomically commit Kafka offsets, object storage and PostgreSQL together.
 
-## Lake layers and AWS portability (planned processing)
+Airflow schedules finite work: source-freshness checks, ordered dbt builds, quality
+reporting and bounded retention cleanup. It does not loop as the streaming consumer.
+Spark checkpoints own streaming progress; Airflow task retries own batch recovery.
+The local Airflow deployment uses SQLite and the standalone executor for a reproducible
+single-machine demo. A production deployment needs an external metadata database,
+distributed execution, authentication and separately scoped service credentials.
 
-The foundation provisions the `pulseforge` S3-compatible bucket. Phase 2 will write:
+## Lake layers and AWS portability
+
+The foundation provisions the `pulseforge` S3-compatible bucket. Streaming writes:
 
 | Prefix | Meaning | Replay/quality behavior |
 | --- | --- | --- |
 | `raw/` | Original Kafka payload plus topic, partition, offset and ingest timestamp | Preserve malformed bytes too; never silently discard evidence |
 | `cleaned/` | Valid, normalized, enriched events in Parquet | Keep schema version and event ID; explicit rejection reasons elsewhere |
-| `curated/` | Business-oriented aggregates in Parquet | Rebuildable from cleaned data with transform version |
+| `curated/` | Reserved for future compacted lake aggregates | Current business marts are rebuilt in PostgreSQL by dbt |
 
-Use event date/type partitions, bounded file counts and eventual compaction. Avoid
+Raw data is partitioned by ingestion date/topic; cleaned data by event date/type. The
+raw archive retains binary bytes, decoded text, Kafka coordinates and validation output.
+Use bounded file counts and eventual compaction. Avoid
 high-cardinality IDs in paths. A single endpoint/region/bucket configuration keeps
 application code portable; production S3 should use workload roles rather than static
 MinIO root keys. Phase 1 uses local credentials only; IAM support belongs with AWS
 deployment work. MinIO is pinned to a published community image for the local demo;
 review upstream security fixes and licensing before any production deployment.
 
-## Warehouse modeling (planned)
+## Warehouse ingestion and planned modeling
 
-Store durable event IDs with a unique constraint and use transactional upserts. Spark's
+The stream sink stores durable event IDs with a primary key and source positions with a
+unique constraint. Each microbatch first loads an unlogged staging table, then merges
+and clears that batch in one PostgreSQL transaction. Metrics upsert on minute and region.
+Spark's
 checkpoint alone cannot provide exactly-once behavior across multiple external sinks.
 Write each sink idempotently and reconcile partial progress on replay. Avoid claiming
 a distributed transaction between Kafka, Parquet and PostgreSQL.
 
-dbt staging normalizes source events; dimensions represent customer, product and region.
-Facts represent orders, payment attempts, shipment events and refund requests. Event
+dbt staging normalizes source events; implemented dimensions represent customer, product
+and region. Facts represent orders, payment attempts, shipment events and refund requests. Event
 grain must remain explicit: a shipment delay is not another shipment, and a refund
 request is not a completed refund. Marts must name those semantics and define the
-denominator of every rate. Initial dimensions can use Type 1 updates; historical
+denominator of every rate. Hourly marts currently cover revenue, payment failures,
+shipment signals, refund requests, operational health and orphan-event quality. Initial
+dimensions use Type 1 observed rollups; historical
 attribute tracking should be introduced only when a real analytical question needs it.
 
 ## API, caching and failures
@@ -95,18 +112,22 @@ owns a bounded async connection pool with pre-ping and lifespan cleanup. boto3 p
 run in threads because its client is synchronous. Exception types, not credentials or
 raw connection strings, appear in application error logs.
 
-The API is local-only and read-only today. Authentication, authorization, TLS, rate
+The API is local-only and read-only today. `/api/metrics/overview` queries the tested
+dbt marts and caches each bounded time window in Redis; `/api/pipeline/status` reports
+warehouse freshness. Cache entries expire after a configurable TTL. Redis failures
+degrade to direct warehouse reads and are counted rather than breaking the endpoint.
+Authentication, authorization, TLS, rate
 limits and least-privilege service credentials are required before external exposure.
-Redis will cache expensive aggregate reads with short TTLs, not authoritative incidents
-or health state. A cache outage should degrade to database reads with load protection.
+Redis never stores authoritative incidents or health state.
 
-## Observability and explainable incidents (planned)
+## Observability and explainable incidents
 
-Current JSON logs include request IDs and request duration; health endpoints expose
-dependency state. Later telemetry must distinguish Kafka input rate, consumer lag,
-Spark batch duration, invalid/duplicate records, warehouse freshness, API errors and
-latency, anomaly counts and AI latency. Never label metrics with event/customer IDs:
-that creates unbounded cardinality. Use those IDs in logs/traces instead.
+JSON logs include request IDs and request duration; health endpoints expose dependency
+state. Prometheus scrapes bounded route-template request counts/latency, cache outcomes
+and warehouse failures. Grafana configuration is provisioned from source. FastAPI is
+OpenTelemetry-instrumented and exports OTLP/HTTP only when configured. Kafka input rate,
+consumer lag and Spark batch telemetry remain future work. Metrics never use event or
+customer IDs as labels because those create unbounded cardinality.
 
 Detectors will require minimum sample sizes, trailing historical baselines and cooldowns.
 Incidents persist observed values, baselines, affected segments and source evidence.
@@ -124,10 +145,12 @@ actual query shapes and bounded API concurrency. Raw object storage supports lon
 replay even after Kafka retention expires. Backups and restore drills are separate from
 replication; both are needed for production reliability.
 
-Kubernetes configuration and Terraform are deliberately deferred. The intended AWS
-mapping is S3, managed PostgreSQL, managed Kafka and container compute, with workload
-identity and managed observability. No cloud account or paid provider is required for
-local development. Phase 7 will document costs before any apply instructions.
+The validated Terraform target maps the API/dashboard to ECS Fargate behind an ALB and
+uses RDS PostgreSQL, ElastiCache Redis, S3, ECR, Secrets Manager and CloudWatch. Public
+Fargate networking avoids NAT Gateway cost for this demo target; data services remain
+non-public and security-group restricted. Kafka, Spark and Airflow deliberately remain
+outside that module until workload evidence supports a managed or operated choice.
+Nothing has been applied, and no cloud account is required for local development.
 
 ## References
 

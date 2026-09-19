@@ -1,4 +1,4 @@
-# Phase 1 verification
+# Verification record
 
 Executed on **2026-09-09** on Windows with Docker Desktop's Linux engine
 (Docker Engine 29.5.2), Python 3.12.13 and uv 0.11.16. This is a functional
@@ -40,8 +40,8 @@ redaction, request IDs, producer failure paths, bounded retries and graceful sto
 - The current test dependencies emit two upstream deprecation warnings from Starlette's
   TestClient (httpx compatibility and an AnyIO alias). Tests pass; warnings are not hidden.
 - GitHub Actions is configured, but a local run is not evidence of a completed hosted CI run.
-- No Spark, dbt, Airflow, React, Redis, metrics server, anomaly detector or AI execution
-  is claimed by this report. These remain on the implementation checklist.
+- At the time of this Phase 1 report, Spark, dbt, Airflow, React, Redis, metrics and AI
+  execution were not claimed. Later sections record the subsequently executed phases.
 - No performance or AI evaluation results exist. A 100-event smoke run is not a benchmark.
 - Local credentials are generated in `.env` and excluded from Git and the Docker context.
 
@@ -61,3 +61,87 @@ uv run pytest --run-integration
 For an outage drill, `docker compose stop postgres`, inspect `/health` and `/ready`,
 then `docker compose start postgres` and confirm `/ready` returns 200 again.
 Do not delete volumes to test a transient outage.
+
+## Phase 2 streaming verification
+
+Executed on **2026-09-18** on Windows with Docker Desktop's Linux engine, Spark 3.5.9,
+Python 3.12.13 and an isolated Kafka/PostgreSQL/MinIO stack. This is a correctness
+smoke test, not a throughput benchmark.
+
+| Check | Observed result |
+| --- | --- |
+| Formatting and lint | Ruff format check and lint passed |
+| Spark transformations | 7 Spark tests passed, including non-UTF-8 raw-byte preservation |
+| Full non-infrastructure suite | 47 tests passed; 6 infrastructure tests deselected |
+| Container build | Pinned Spark image and Kafka/PostgreSQL/S3 connector resolution succeeded |
+| Initial bounded stream | 200 Kafka inputs produced 179 unique accepted rows and 15 dead-letter records |
+| Event sink integrity | 179 rows, 179 distinct IDs, zero persisted duplicates |
+| Minute metrics | 179 events, 39 payment attempts, 22 failures and USD 4,683.30 successful revenue |
+| Lake output | Raw and cleaned Parquet objects were written to isolated MinIO storage |
+| Automated all-sink path | Opt-in integration test delivered a valid event to PostgreSQL/cleaned MinIO and an invalid event to raw MinIO/dead-letter Kafka |
+| Deterministic replay | Replayed the same 200 IDs; event and metric counts remained unchanged; raw evidence and DLQ records increased |
+| Checkpoint restart | Forced a Spark container recreation; five queries resumed without errors and counts remained unchanged |
+
+The failure/recovery path also exposed a real warehouse defect: staging represented UUID
+and JSON values as text, while the final table required `uuid` and `jsonb`. The merge now
+casts those values explicitly. Restarting from the unchanged checkpoint retried the batch,
+loaded all 179 valid events and left no duplicate event IDs.
+
+Current limits: the all-sink delivery path is automated, but deliberate sink outages
+and restart recovery remain manual smoke procedures; rejected records are intentionally replayable and therefore at-least-once in the
+dead-letter topic; the single local Spark driver is not a production cluster; curated
+business models and compaction belong to Phase 3. Hosted GitHub Actions status is not
+claimed because this verification ran locally.
+
+## Phase 3 dbt verification
+
+Executed on **2026-09-18** against the same populated isolated PostgreSQL warehouse.
+dbt Core 1.12.5 with dbt-postgres 1.11.0 built 14 models and ran 43 data tests.
+The result was **55 pass, 2 warnings, 0 errors, 0 skips** across 57 operations.
+
+The warnings are evidence rather than ignored failures: deliberate upstream corruption
+left five payment attempts and three shipment events without their order-created event.
+Relationship tests report those rows at warning severity, while
+`mart_data_quality_hourly` persists their counts by hour and region. The modeled revenue
+reconciled to the stream aggregate at USD 4,683.30 across 17 successful payments.
+
+## Phase 3 Airflow verification
+
+Executed on **2026-09-18** against the populated isolated stack with Apache Airflow
+3.3.2 and dbt Core 1.12.5. The custom Airflow image built successfully and `pip check`
+reported no broken requirements. Database migration and DAG reserialization succeeded;
+`airflow dags list-import-errors --output json` returned an empty list and all three
+DAGs were registered.
+
+| DAG | Observed execution result |
+| --- | --- |
+| `pulseforge_analytics_pipeline` | Four tasks succeeded: source freshness, staging/dimension/fact build, mart build and 43 dbt tests (41 pass, 2 expected warnings) |
+| `pulseforge_data_quality_report` | Two tasks succeeded and wrote `artifacts/quality/20260918T202124Z.json` from dbt's real run-results artifact (41 pass, 2 warnings, no failures) |
+| `pulseforge_lake_retention` | Task succeeded in the default dry-run mode with 0 expired candidates and 0 deletions |
+
+The DAG runs used actual PostgreSQL and MinIO services. The retention result proves the
+safe no-delete default and execution path; it is not evidence that deletion of expired
+objects has been exercised. Airflow standalone uses SQLite locally and is not presented
+as a highly available production deployment.
+
+## Product, observability and deployment-target verification
+
+Executed on **2026-09-18/19** against the populated isolated stack. The warehouse
+contained the same 17 successful payments and USD 4,683.30 revenue reconciled above.
+
+| Check | Observed result |
+| --- | --- |
+| Python quality | Ruff format/check and schema export passed; 50 non-integration tests passed, 6 live tests deselected |
+| Frontend quality | npm audit reported 0 vulnerabilities; TypeScript check and Vite production build passed |
+| Analytics API | Overview returned actual revenue/payment/shipment/refund/operations/quality marts; repeated request reported a Redis cache hit |
+| Cache outage | With Redis stopped and an uncached time window, overview still returned HTTP 200 from PostgreSQL; Redis was restarted |
+| Dashboard | Production Nginx image served the React bundle and proxied `/api/metrics/overview` to the real API |
+| Metrics | Prometheus health passed and `up{job="pulseforge-api"}` returned 1 after a real scrape |
+| Grafana | Provisioned container health returned database `ok` on Grafana 12.1.1 |
+| Compose | All profiles parsed successfully; isolated API, dashboard, Redis, Prometheus and Grafana started |
+| Terraform | Terraform 1.13.5 initialized AWS/random providers and `terraform validate` returned success |
+
+The frontend build reports a 577.35 kB minified JavaScript chunk (172.38 kB gzip), so
+route/chart code splitting is worthwhile future work; no Core Web Vitals or load claim
+is inferred from a successful build. Terraform validation is syntax/provider-schema
+evidence only. No AWS plan or apply ran, and no public deployment is claimed.
