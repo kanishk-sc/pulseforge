@@ -13,3 +13,11 @@ services:
     ports: !reset []
   airflow:
     ports: !reset []
+  redis:
+    ports: !reset []
+  dashboard:
+    ports: !reset []
+  prometheus:
+    ports: !reset []
+  grafana:
+    ports: !reset []

@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     events_per_second: float = Field(default=10, gt=0, le=10000)
     anomaly_rate: float = Field(default=0.02, ge=0, le=1)
     generator_seed: int = 42
+    redis_url: str = "redis://localhost:6379/0"
+    analytics_cache_ttl_seconds: int = Field(default=60, ge=1, le=3600)
+    otel_exporter_otlp_endpoint: str | None = None
 
     @property
     def database_url(self) -> URL:
