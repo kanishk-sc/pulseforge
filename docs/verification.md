@@ -40,8 +40,8 @@ redaction, request IDs, producer failure paths, bounded retries and graceful sto
 - The current test dependencies emit two upstream deprecation warnings from Starlette's
   TestClient (httpx compatibility and an AnyIO alias). Tests pass; warnings are not hidden.
 - GitHub Actions is configured, but a local run is not evidence of a completed hosted CI run.
-- No Spark, dbt, Airflow, React, Redis, metrics server, anomaly detector or AI execution
-  is claimed by this report. These remain on the implementation checklist.
+- At the time of this Phase 1 report, Spark, dbt, Airflow, React, Redis, metrics and AI
+  execution were not claimed. Later sections record the subsequently executed phases.
 - No performance or AI evaluation results exist. A 100-event smoke run is not a benchmark.
 - Local credentials are generated in `.env` and excluded from Git and the Docker context.
 
@@ -123,3 +123,25 @@ The DAG runs used actual PostgreSQL and MinIO services. The retention result pro
 safe no-delete default and execution path; it is not evidence that deletion of expired
 objects has been exercised. Airflow standalone uses SQLite locally and is not presented
 as a highly available production deployment.
+
+## Product, observability and deployment-target verification
+
+Executed on **2026-09-18/19** against the populated isolated stack. The warehouse
+contained the same 17 successful payments and USD 4,683.30 revenue reconciled above.
+
+| Check | Observed result |
+| --- | --- |
+| Python quality | Ruff format/check and schema export passed; 50 non-integration tests passed, 6 live tests deselected |
+| Frontend quality | npm audit reported 0 vulnerabilities; TypeScript check and Vite production build passed |
+| Analytics API | Overview returned actual revenue/payment/shipment/refund/operations/quality marts; repeated request reported a Redis cache hit |
+| Cache outage | With Redis stopped and an uncached time window, overview still returned HTTP 200 from PostgreSQL; Redis was restarted |
+| Dashboard | Production Nginx image served the React bundle and proxied `/api/metrics/overview` to the real API |
+| Metrics | Prometheus health passed and `up{job="pulseforge-api"}` returned 1 after a real scrape |
+| Grafana | Provisioned container health returned database `ok` on Grafana 12.1.1 |
+| Compose | All profiles parsed successfully; isolated API, dashboard, Redis, Prometheus and Grafana started |
+| Terraform | Terraform 1.13.5 initialized AWS/random providers and `terraform validate` returned success |
+
+The frontend build reports a 577.35 kB minified JavaScript chunk (172.38 kB gzip), so
+route/chart code splitting is worthwhile future work; no Core Web Vitals or load claim
+is inferred from a successful build. Terraform validation is syntax/provider-schema
+evidence only. No AWS plan or apply ran, and no public deployment is claimed.

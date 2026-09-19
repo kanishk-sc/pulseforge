@@ -7,17 +7,22 @@ to reliable operational decisions: preserve the original event, validate its con
 process it once at the sink, model the business, detect explainable anomalies, and
 show the evidence behind an incident.
 
-**Current milestone: Phase 3 — analytics engineering.** The Phase 1 foundation now
-feeds a Spark Structured Streaming application that validates and deduplicates events,
-routes rejected records, archives raw and cleaned Parquet, and writes idempotent event
-and minute-metric tables to PostgreSQL. dbt builds tested facts, dimensions and hourly
-marts from those rows. Airflow schedules freshness checks, ordered dbt transformations,
-quality artifacts and dry-run-first lake retention. The dashboard, anomaly detection
-and AI assistant remain planned; they are not represented as working features.
-All generated data is synthetic.
+The implemented path runs from synthetic events through Kafka, Spark, PostgreSQL/MinIO,
+dbt and Airflow to a cached analytics API and React operations dashboard. Prometheus
+scrapes bounded-cardinality API metrics, Grafana is provisioned from source, and
+FastAPI can export OpenTelemetry traces. Explainable anomaly detection, persisted
+incidents and the evidence-based assistant remain planned. All generated data is
+synthetic; no public deployment or performance result is claimed.
 
 See the [implementation checklist](docs/architecture/implementation-plan.md) and
 [actual verification record](docs/verification.md).
+
+## Demo
+
+There is no hosted demo. The full system is reproducible with Docker Compose; the
+dashboard runs at `http://localhost:5173` and reads real dbt marts through FastAPI.
+No screenshot is checked in because the current evidence is the runnable path and its
+tests rather than a staged image.
 
 ## Business problem
 
@@ -45,8 +50,12 @@ flowchart LR
     W --> DBT[dbt facts / dimensions / marts]
     AF[Airflow batch orchestration] --> DBT
     AF --> L
-    DBT -. Phase 4 .-> API[Metrics and incident APIs]
-    API -.-> UI[React operations dashboard]
+    DBT --> API[FastAPI analytics endpoints]
+    API --> R[(Redis TTL cache)]
+    API --> UI[React operations dashboard]
+    API --> P[Prometheus]
+    P --> G[Grafana]
+    API -. optional OTLP .-> O[OpenTelemetry collector]
     RAG[Phase 6: evidence-based assistant] -.-> API
     RAG -.-> V[(pgvector runbooks)]
 ```
@@ -57,14 +66,29 @@ flowchart LR
 | Event backbone | Kafka in KRaft mode | Implemented: three partitions, event and dead-letter topics, seven-day retention |
 | Database | PostgreSQL, SQLAlchemy, asyncpg, psycopg | Implemented: readiness plus idempotent event and minute-metric sinks |
 | Lake | MinIO, boto3, Parquet | Implemented: lossless raw and validated cleaned stream archives |
-| API | FastAPI | Implemented: liveness, dependency readiness, OpenAPI, request IDs, JSON logs |
+| API | FastAPI | Implemented: health/readiness, typed analytics and pipeline APIs, request IDs, JSON logs |
 | Processing | Spark Structured Streaming | Implemented: validation, watermark deduplication, DLQ routing and checkpoints |
 | Modeling | dbt-postgres | Implemented: event facts, observed dimensions, hourly business and quality marts |
 | Orchestration | Airflow | Implemented: analytics, quality-report and retention DAGs |
-| Product | React, TypeScript, Redis | Phase 4 |
-| Telemetry | Prometheus, Grafana, OpenTelemetry | Phase 5 |
+| Product | React, TypeScript, Recharts, Redis | Implemented: real mart data, polling, TTL cache and failure states |
+| Telemetry | Prometheus, Grafana, OpenTelemetry | Implemented for the API; Spark/Kafka-native telemetry remains future work |
 | Assistant | pgvector, provider abstraction | Phase 6, optional paid provider, offline support |
-| Deployment | Kubernetes, Terraform AWS | Phase 7, gated on local verification |
+| Deployment | Terraform, AWS ECS/RDS/ElastiCache/S3/ECR | Validated configuration; not applied or publicly deployed |
+
+## Key engineering features
+
+- Lossless raw Kafka evidence, explicit dead-letter reasons and watermark-aware deduplication
+- Idempotent PostgreSQL sinks backed by event and source-offset uniqueness constraints
+- dbt event-grain facts and tested marts with business denominators kept explicit
+- Airflow batch orchestration separated from Spark's checkpoint-owned streaming lifecycle
+- Redis-cached typed analytics APIs with direct-warehouse fallback during cache failure
+- Real-data React dashboard plus bounded-cardinality Prometheus metrics and optional traces
+
+## Tech stack
+
+Python 3.12, SQL, TypeScript, React, FastAPI, Pydantic, Kafka, Spark Structured
+Streaming, PostgreSQL, SQLAlchemy, MinIO/S3, dbt, Airflow, Redis, Prometheus, Grafana,
+OpenTelemetry, Docker Compose, Terraform, pytest and GitHub Actions.
 
 ## Local setup
 
@@ -98,10 +122,22 @@ or application authentication, and must not be exposed to the Internet.
 | PostgreSQL | localhost:5432 |
 | Spark streaming UI | http://localhost:4040 (while the streaming profile is running) |
 | Airflow | http://localhost:8080 (while the orchestration profile is running) |
+| Operations dashboard | http://localhost:5173 (with the product profile) |
+| Prometheus | http://localhost:9090 (with the observability profile) |
+| Grafana | http://localhost:3000 (with the observability profile) |
 
 Initialization creates `commerce.events.v1`, `commerce.dead-letter.v1`, and the
 `pulseforge` bucket. It is safe to rerun. The Spark application creates its two
 `analytics` tables and staging tables idempotently at startup.
+
+### Environment variables
+
+`.env.example` is the source of truth. `POSTGRES_PASSWORD` and
+`MINIO_ROOT_PASSWORD` are required local secrets generated by `scripts/init_env.py`.
+Traffic, watermark, trigger, retention and cache TTL settings have safe development
+defaults. `OTEL_EXPORTER_OTLP_ENDPOINT` is optional and blank by default. Grafana's
+default password is local-only; override `GRAFANA_ADMIN_PASSWORD` when enabling that
+profile. Never commit `.env` or Terraform state.
 
 ### Run the streaming pipeline
 
@@ -205,12 +241,34 @@ then corrupts selected bytes deliberately.
 ```sh
 curl http://localhost:8000/health
 curl -H "X-Request-ID: demo-001" http://localhost:8000/ready
+curl "http://localhost:8000/api/metrics/overview?hours=24"
+curl http://localhost:8000/api/pipeline/status
+curl http://localhost:8000/metrics
 ```
 
 In PowerShell, use `curl.exe` or `Invoke-RestMethod`. `/health` reports process liveness;
 `/ready` checks a real PostgreSQL query, the Kafka event topic, and the S3 bucket. It
 returns HTTP 503 when a dependency is unavailable and never returns raw connection
-errors. Metrics and incident endpoints will arrive with populated data in Phase 4.
+errors. Analytics responses are cached in Redis for 60 seconds by default. If Redis is
+unavailable, the API records that outcome and reads PostgreSQL directly; Redis is never
+the system of record. The overview endpoint reads the actual dbt revenue, payment,
+shipment, refund, operations and data-quality marts. An incident endpoint does not yet
+exist and is not claimed.
+
+### Run the product and observability layers
+
+Build the marts first, then start the dashboard and monitoring profiles:
+
+```sh
+docker compose --profile product up -d --build dashboard
+docker compose --profile observability up -d prometheus grafana
+```
+
+The React/TypeScript client polls typed endpoints and renders loading, empty and error
+states. Nginx serves the production bundle and proxies `/api` to FastAPI. Grafana loads
+the checked-in dashboard and Prometheus datasource automatically. Set
+`OTEL_EXPORTER_OTLP_ENDPOINT` only when an OTLP/HTTP collector is available; traces are
+otherwise disabled without affecting requests.
 
 ### Development and tests
 
@@ -226,8 +284,9 @@ The integration command requires the streaming Compose profile. It verifies Kafk
 delivery/readback, S3 write/read/delete, PostgreSQL transactions, API readiness,
 repeated bootstrap, and valid/invalid events across every Spark sink.
 Integration tests skip by default rather than silently pretending to use real services.
-CI runs lint, unit/API tests, Docker builds, the real Compose integration suite, dbt,
-Airflow import validation and all three Airflow DAG test runs without private secrets.
+CI runs lint, unit/API tests, the TypeScript type-check/audit/build, Docker builds, the
+real Compose integration suite, dbt, Airflow import validation and all three Airflow
+DAG test runs without private secrets or cloud credentials.
 
 For host API development, stop the container API first, then run:
 
@@ -255,12 +314,28 @@ source event references. Its marts calculate hourly revenue, payment failure rat
 shipment performance, refunds, operational health and data-quality signals with
 explicit denominators. See [design decisions](docs/architecture/architecture.md).
 
+## Repository structure
+
+| Path | Responsibility |
+| --- | --- |
+| `src/pulseforge` | Contracts, producer, streaming support, API, analytics and telemetry |
+| `streaming` | Spark Structured Streaming job and sink logic |
+| `analytics/dbt` | Staging, facts, dimensions, marts and data tests |
+| `orchestration/dags` | Airflow analytics, quality and retention workflows |
+| `frontend` | React/TypeScript operations dashboard and Nginx proxy |
+| `observability` | Prometheus and provisioned Grafana configuration |
+| `infra` | Docker images, isolated test override and validated Terraform target |
+| `tests` | Unit, API and opt-in infrastructure integration tests |
+
 ## Observability and AI
 
-Today, API, producer and streaming application logs are JSON. API responses include a
-validated or generated request ID. Producer logs distinguish acknowledged events from a failed delivery.
-Dependency failures are visible through readiness, independent of API liveness.
-Phase 5 adds metrics and traces after the pipeline has meaningful measurements.
+API, producer and streaming application logs are JSON. API responses include a
+validated or generated request ID. Prometheus records request totals and latency using
+route templates rather than raw URLs, plus cache outcomes and warehouse-query failures.
+Grafana visualizes those signals. OpenTelemetry instruments FastAPI and exports over
+OTLP/HTTP only when configured. Dependency failures remain visible through readiness,
+independent of liveness. Kafka consumer lag and Spark-native metrics are not yet wired
+into this monitoring stack.
 
 The planned assistant retrieves runbooks, incident evidence and recent metrics before
 responding. Statistical detection remains outside the LLM. The main platform will
@@ -268,12 +343,32 @@ remain functional without an LLM key; offline output will be labeled as an evide
 summary. Evaluation will distinguish measured retrieval/latency metrics from human
 judgments of usefulness. No AI accuracy results exist yet.
 
+## Deployment target
+
+[`infra/terraform`](infra/terraform) defines a cost-conscious AWS target with an ALB,
+two Fargate services, encrypted RDS PostgreSQL, encrypted ElastiCache Redis, versioned
+S3, immutable/scanned ECR repositories, CloudWatch logs, Secrets Manager and scoped
+task roles. It validates without credentials and has never been applied. The module
+does not pretend to deploy Kafka, Spark or Airflow; choosing their managed or operated
+targets requires workload and cost evidence first. See its README for exact validation,
+security gaps and billable-resource warnings.
+
+## Current status
+
+Implemented: event contracts and generation, Kafka/Spark processing, raw/cleaned lake,
+idempotent PostgreSQL sinks, dbt models/tests, Airflow orchestration, cached analytics
+API, React dashboard, API metrics/tracing hooks, Grafana provisioning, Compose and CI.
+
+In progress: deeper browser tests and Spark/Kafka-native monitoring.
+
+Planned: explainable anomaly baselines, persisted incidents, retrieval-grounded
+operations assistance, load/failure experiments and any real cloud deployment.
+
 ## Screenshots and benchmarks
 
-No dashboard screenshot is included because the dashboard is not implemented yet.
-No load-test performance numbers are claimed. The foundation verification record is
-a functional test report, not a benchmark. Later benchmark reports will identify the
-environment, concurrency, throughput, p50/p95/p99 and error rate.
+No screenshot or load-test performance number is claimed. The verification record is a
+functional test report, not a benchmark. A future benchmark must identify environment,
+concurrency, throughput, p50/p95/p99 and error rate.
 
 ## Engineering decisions and next milestones
 
@@ -284,8 +379,16 @@ environment, concurrency, throughput, p50/p95/p99 and error rate.
 - Readiness probes fail closed, with bounded calls; liveness stays independent.
 - One Python package shares contracts across separately runnable services. Separate
   Python projects would add packaging overhead before independent release cycles exist.
-- No placeholder infrastructure, empty application folders, fake charts or fabricated scores.
+- Redis is a disposable acceleration layer; PostgreSQL/dbt marts remain authoritative.
+- The dashboard contains no fake values and exposes upstream empty/error conditions.
+- Terraform models an interview-defensible deployment boundary without applying paid infrastructure.
 
-Next are operational APIs and the dashboard. Subsequent phases add observability and
-evidence-based AI. Kubernetes and AWS Terraform follow only after
-the local application works; no paid infrastructure is created automatically.
+The highest-value next work is an explainable anomaly-to-incident flow, native
+Kafka/Spark telemetry, browser tests, and measured failure/load experiments. The AI
+assistant should follow only when there are runbooks and incidents worth retrieving.
+
+## Future work
+
+Implement the anomaly-to-incident path first, then add native Kafka/Spark telemetry and
+repeatable failure/load experiments. Browser coverage and frontend code splitting are
+smaller follow-ups. Retrieval-grounded assistance remains intentionally last.
