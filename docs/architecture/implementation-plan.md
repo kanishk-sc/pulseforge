@@ -40,15 +40,18 @@ all three jobs after correcting the MinIO registry reference. See [design](phase
 [evidence](../verification.md). Phase 4 and later remain unimplemented.
 
 ## 4. Product layer
-- [ ] Typed metrics, incident, pipeline and quality APIs
-- [ ] Redis cache with bounded TTL and graceful cache failure
+- [x] Typed metrics, pipeline and quality APIs backed by dbt marts
+- [x] Redis cache with bounded TTL and graceful cache failure
+- [ ] Persisted incident API
 - [ ] Explainable anomaly detectors with minimum samples and baseline evidence
-- [ ] React/TypeScript dashboard, polling, empty/error states and critical UI tests
+- [x] React/TypeScript dashboard, polling, typed data, and loading/empty/error states
+- [ ] Critical component and browser UI tests
 - [ ] End-to-end anomaly → persisted incident → dashboard demonstration
 
 ## 5. Observability and reliability
-- [ ] Prometheus, Grafana, OpenTelemetry and correlation across services
-- [ ] Lag, throughput, processing latency, errors, quality and anomaly telemetry
+- [x] Prometheus API metrics, provisioned Grafana dashboard and optional FastAPI OpenTelemetry export
+- [x] API latency/errors, cache outcomes, warehouse failures and modeled throughput/quality views
+- [ ] Kafka consumer lag, Spark-native processing and anomaly telemetry
 - [ ] Load tests, failure drills and actual benchmark artifacts with environment metadata
 
 ## 6. AI operations
@@ -60,8 +63,9 @@ all three jobs after correcting the MinIO registry reference. See [design](phase
 
 ## 7. Deployment engineering — gated on working local platform
 - [ ] Kubernetes deployments/services/config/probes/resources for owned services
-- [ ] Terraform managed AWS architecture; validation only, never automatic apply
-- [ ] Cost guidance, production security, recovery and scaling documentation
+- [x] Terraform AWS target for ECS, ALB, RDS, ElastiCache, S3, ECR, IAM and logs; validated but never applied
+- [x] Demo cost trade-offs, production security gaps and state/deletion safeguards documented
+- [ ] Recovery drills, autoscaling policy and measured capacity guidance
 
 ## Verification policy
 Run Ruff format/check and pytest after code changes. Run relevant services and record

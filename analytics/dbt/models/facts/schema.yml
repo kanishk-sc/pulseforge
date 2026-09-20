@@ -1,0 +1,43 @@
+version: 2
+
+models:
+  - name: fct_orders
+    description: One row per order-created event; not an order lifecycle snapshot.
+    columns:
+      - name: order_event_id
+        data_tests: [not_null, unique]
+      - name: order_id
+        data_tests: [not_null]
+  - name: fct_payment_attempts
+    description: One row per successful or failed payment attempt.
+    columns:
+      - name: payment_event_id
+        data_tests: [not_null, unique]
+      - name: order_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments: {to: "ref('fct_orders')", field: order_id}
+              config: {severity: warn}
+  - name: fct_shipments
+    description: One row per shipment-created or shipment-delay signal.
+    columns:
+      - name: shipment_event_id
+        data_tests: [not_null, unique]
+      - name: order_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments: {to: "ref('fct_orders')", field: order_id}
+              config: {severity: warn}
+  - name: fct_refund_requests
+    description: One row per refund request; this does not claim a completed refund.
+    columns:
+      - name: refund_event_id
+        data_tests: [not_null, unique]
+      - name: order_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments: {to: "ref('fct_orders')", field: order_id}
+              config: {severity: warn}

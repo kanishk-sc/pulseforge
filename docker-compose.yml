@@ -14,9 +14,24 @@ x-app: &app
     S3_ENDPOINT_URL: http://minio:9000
     MINIO_ROOT_USER: ${MINIO_ROOT_USER:-pulseforge}
     MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Run scripts/init_env.py first}
+    REDIS_URL: redis://redis:6379/0
+    ANALYTICS_CACHE_TTL_SECONDS: ${ANALYTICS_CACHE_TTL_SECONDS:-60}
+    OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
   init: true
 
 services:
+  redis:
+    image: redis:7.4.7-alpine
+    profiles: ["product"]
+    command: redis-server --appendonly yes
+    volumes: ["redis-data:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
   postgres:
     image: postgres:16.9-bookworm
     environment:
@@ -194,8 +209,47 @@ services:
     mem_limit: 1536m
     restart: "no"
 
+  dashboard:
+    image: pulseforge-dashboard:local
+    build:
+      context: ./frontend
+    profiles: ["product"]
+    ports: ["127.0.0.1:5173:80"]
+    depends_on:
+      api: {condition: service_healthy}
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    profiles: ["observability"]
+    command: ["--config.file=/etc/prometheus/prometheus.yml"]
+    ports: ["127.0.0.1:9090:9090"]
+    volumes:
+      - "./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro"
+    depends_on:
+      api: {condition: service_healthy}
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:12.1.1
+    profiles: ["observability"]
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-pulseforge-local-only}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports: ["127.0.0.1:3000:3000"]
+    volumes:
+      - "./observability/grafana/provisioning:/etc/grafana/provisioning:ro"
+      - "./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro"
+      - "grafana-data:/var/lib/grafana"
+    depends_on:
+      prometheus: {condition: service_started}
+    restart: unless-stopped
+
 volumes:
   postgres-data:
   kafka-data:
   minio-data:
   airflow-state:
+  redis-data:
+  grafana-data:

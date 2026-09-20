@@ -1,0 +1,23 @@
+select
+    event_id,
+    schema_version,
+    event_type,
+    event_timestamp,
+    date_trunc('hour', event_timestamp) as event_hour,
+    customer_id,
+    order_id,
+    product_id,
+    amount,
+    currency,
+    payment_provider,
+    shipment_provider,
+    region,
+    status,
+    metadata,
+    source_topic,
+    source_partition,
+    source_offset,
+    kafka_timestamp,
+    processed_at,
+    processing_latency_ms
+from {{ source('stream', 'stream_events') }}

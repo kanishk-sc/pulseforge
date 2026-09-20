@@ -16,6 +16,13 @@ All generated data is synthetic.
 See the [implementation checklist](docs/architecture/implementation-plan.md) and
 [actual verification record](docs/verification.md).
 
+## Demo
+
+There is no hosted demo. The full system is reproducible with Docker Compose; the
+dashboard runs at `http://localhost:5173` and reads real dbt marts through FastAPI.
+No screenshot is checked in because the current evidence is the runnable path and its
+tests rather than a staged image.
+
 ## Business problem
 
 A payment provider can fail in one region while aggregate revenue still looks normal.
@@ -63,7 +70,22 @@ flowchart LR
 | Product | React, TypeScript, Redis | Phase 4 |
 | Telemetry | Prometheus, Grafana, OpenTelemetry | Phase 5 |
 | Assistant | pgvector, provider abstraction | Phase 6, optional paid provider, offline support |
-| Deployment | Kubernetes, Terraform AWS | Phase 7, gated on local verification |
+| Deployment | Terraform, AWS ECS/RDS/ElastiCache/S3/ECR | Validated configuration; not applied or publicly deployed |
+
+## Key engineering features
+
+- Lossless raw Kafka evidence, explicit dead-letter reasons and watermark-aware deduplication
+- Idempotent PostgreSQL sinks backed by event and source-offset uniqueness constraints
+- dbt event-grain facts and tested marts with business denominators kept explicit
+- Airflow batch orchestration separated from Spark's checkpoint-owned streaming lifecycle
+- Redis-cached typed analytics APIs with direct-warehouse fallback during cache failure
+- Real-data React dashboard plus bounded-cardinality Prometheus metrics and optional traces
+
+## Tech stack
+
+Python 3.12, SQL, TypeScript, React, FastAPI, Pydantic, Kafka, Spark Structured
+Streaming, PostgreSQL, SQLAlchemy, MinIO/S3, dbt, Airflow, Redis, Prometheus, Grafana,
+OpenTelemetry, Docker Compose, Terraform, pytest and GitHub Actions.
 
 ## Local setup
 
@@ -234,12 +256,34 @@ for model grains, metric denominators and failure/recovery behavior.
 ```sh
 curl http://localhost:8000/health
 curl -H "X-Request-ID: demo-001" http://localhost:8000/ready
+curl "http://localhost:8000/api/metrics/overview?hours=24"
+curl http://localhost:8000/api/pipeline/status
+curl http://localhost:8000/metrics
 ```
 
 In PowerShell, use `curl.exe` or `Invoke-RestMethod`. `/health` reports process liveness;
 `/ready` checks a real PostgreSQL query, the Kafka event topic, and the S3 bucket. It
 returns HTTP 503 when a dependency is unavailable and never returns raw connection
-errors. Metrics and incident endpoints will arrive with populated data in Phase 4.
+errors. Analytics responses are cached in Redis for 60 seconds by default. If Redis is
+unavailable, the API records that outcome and reads PostgreSQL directly; Redis is never
+the system of record. The overview endpoint reads the actual dbt revenue, payment,
+shipment, refund, operations and data-quality marts. An incident endpoint does not yet
+exist and is not claimed.
+
+### Run the product and observability layers
+
+Build the marts first, then start the dashboard and monitoring profiles:
+
+```sh
+docker compose --profile product up -d --build dashboard
+docker compose --profile observability up -d prometheus grafana
+```
+
+The React/TypeScript client polls typed endpoints and renders loading, empty and error
+states. Nginx serves the production bundle and proxies `/api` to FastAPI. Grafana loads
+the checked-in dashboard and Prometheus datasource automatically. Set
+`OTEL_EXPORTER_OTLP_ENDPOINT` only when an OTLP/HTTP collector is available; traces are
+otherwise disabled without affecting requests.
 
 ### Development and tests
 
@@ -308,23 +352,45 @@ remain functional without an LLM key; offline output will be labeled as an evide
 summary. Evaluation will distinguish measured retrieval/latency metrics from human
 judgments of usefulness. No AI accuracy results exist yet.
 
+## Deployment target
+
+[`infra/terraform`](infra/terraform) defines a cost-conscious AWS target with an ALB,
+two Fargate services, encrypted RDS PostgreSQL, encrypted ElastiCache Redis, versioned
+S3, immutable/scanned ECR repositories, CloudWatch logs, Secrets Manager and scoped
+task roles. It validates without credentials and has never been applied. The module
+does not pretend to deploy Kafka, Spark or Airflow; choosing their managed or operated
+targets requires workload and cost evidence first. See its README for exact validation,
+security gaps and billable-resource warnings.
+
+## Current status
+
+Implemented: event contracts and generation, Kafka/Spark processing, raw/cleaned lake,
+idempotent PostgreSQL sinks, dbt models/tests, Airflow orchestration, cached analytics
+API, React dashboard, API metrics/tracing hooks, Grafana provisioning, Compose and CI.
+
+In progress: deeper browser tests and Spark/Kafka-native monitoring.
+
+Planned: explainable anomaly baselines, persisted incidents, retrieval-grounded
+operations assistance, load/failure experiments and any real cloud deployment.
+
 ## Screenshots and benchmarks
 
-No dashboard screenshot is included because the dashboard is not implemented yet.
-No load-test performance numbers are claimed. The foundation verification record is
-a functional test report, not a benchmark. Later benchmark reports will identify the
-environment, concurrency, throughput, p50/p95/p99 and error rate.
+No screenshot or load-test performance number is claimed. The verification record is a
+functional test report, not a benchmark. A future benchmark must identify environment,
+concurrency, throughput, p50/p95/p99 and error rate.
 
 ## Engineering decisions and next milestones
 
 - Kafka decouples event ingestion from downstream outages and supports replay.
 - KRaft and one broker keep local setup small; this is not a highly available deployment.
-- Producer idempotence handles broker retries within a session; durable sink deduplication
-  is still required across restarts and for intentionally duplicated application events.
+- Producer idempotence handles broker retries within a session. Spark applies event-time
+  deduplication, while PostgreSQL uniqueness is the durable backstop across restarts.
 - Readiness probes fail closed, with bounded calls; liveness stays independent.
 - One Python package shares contracts across separately runnable services. Separate
   Python projects would add packaging overhead before independent release cycles exist.
-- No placeholder infrastructure, empty application folders, fake charts or fabricated scores.
+- Redis is a disposable acceleration layer; PostgreSQL/dbt marts remain authoritative.
+- The dashboard contains no fake values and exposes upstream empty/error conditions.
+- Terraform models an interview-defensible deployment boundary without applying paid infrastructure.
 
 Next is Phase 4: operational APIs, explainable anomaly detectors and the dashboard.
 Subsequent phases add

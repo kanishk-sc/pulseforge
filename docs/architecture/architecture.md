@@ -70,7 +70,9 @@ The foundation provisions the `pulseforge` S3-compatible bucket. Phase 2 writes:
 | `cleaned/` | Valid, normalized, enriched events in Parquet | Keep schema version and event ID; explicit rejection reasons elsewhere |
 | `curated/` | Normalized events with date/hour and operational flags | Minute aggregates are stored in PostgreSQL |
 
-Use event date/type partitions, bounded file counts and eventual compaction. Avoid
+Raw data is partitioned by ingestion date/topic; cleaned data by event date/type. The
+raw archive retains binary bytes, decoded text, Kafka coordinates and validation output.
+Use bounded file counts and eventual compaction. Avoid
 high-cardinality IDs in paths. A single endpoint/region/bucket configuration keeps
 application code portable; production S3 should use workload roles rather than static
 MinIO root keys. Phase 1 uses local credentials only; IAM support belongs with AWS
@@ -79,7 +81,10 @@ review upstream security fixes and licensing before any production deployment.
 
 ## Warehouse modeling
 
-Store durable event IDs with a unique constraint and use transactional upserts. Spark's
+The stream sink stores durable event IDs with a primary key and source positions with a
+unique constraint. Each microbatch first loads an unlogged staging table, then merges
+and clears that batch in one PostgreSQL transaction. Metrics upsert on minute and region.
+Spark's
 checkpoint alone cannot provide exactly-once behavior across multiple external sinks.
 Write each sink idempotently and reconcile partial progress on replay. Avoid claiming
 a distributed transaction between Kafka, Parquet and PostgreSQL.
@@ -109,18 +114,22 @@ owns a bounded async connection pool with pre-ping and lifespan cleanup. boto3 p
 run in threads because its client is synchronous. Exception types, not credentials or
 raw connection strings, appear in application error logs.
 
-The API is local-only and read-only today. Authentication, authorization, TLS, rate
+The API is local-only and read-only today. `/api/metrics/overview` queries the tested
+dbt marts and caches each bounded time window in Redis; `/api/pipeline/status` reports
+warehouse freshness. Cache entries expire after a configurable TTL. Redis failures
+degrade to direct warehouse reads and are counted rather than breaking the endpoint.
+Authentication, authorization, TLS, rate
 limits and least-privilege service credentials are required before external exposure.
-Redis will cache expensive aggregate reads with short TTLs, not authoritative incidents
-or health state. A cache outage should degrade to database reads with load protection.
+Redis never stores authoritative incidents or health state.
 
-## Observability and explainable incidents (planned)
+## Observability and explainable incidents
 
-Current JSON logs include request IDs and request duration; health endpoints expose
-dependency state. Later telemetry must distinguish Kafka input rate, consumer lag,
-Spark batch duration, invalid/duplicate records, warehouse freshness, API errors and
-latency, anomaly counts and AI latency. Never label metrics with event/customer IDs:
-that creates unbounded cardinality. Use those IDs in logs/traces instead.
+JSON logs include request IDs and request duration; health endpoints expose dependency
+state. Prometheus scrapes bounded route-template request counts/latency, cache outcomes
+and warehouse failures. Grafana configuration is provisioned from source. FastAPI is
+OpenTelemetry-instrumented and exports OTLP/HTTP only when configured. Kafka input rate,
+consumer lag and Spark batch telemetry remain future work. Metrics never use event or
+customer IDs as labels because those create unbounded cardinality.
 
 Detectors will require minimum sample sizes, trailing historical baselines and cooldowns.
 Incidents persist observed values, baselines, affected segments and source evidence.
@@ -138,10 +147,12 @@ actual query shapes and bounded API concurrency. Raw object storage supports lon
 replay even after Kafka retention expires. Backups and restore drills are separate from
 replication; both are needed for production reliability.
 
-Kubernetes configuration and Terraform are deliberately deferred. The intended AWS
-mapping is S3, managed PostgreSQL, managed Kafka and container compute, with workload
-identity and managed observability. No cloud account or paid provider is required for
-local development. Phase 7 will document costs before any apply instructions.
+The validated Terraform target maps the API/dashboard to ECS Fargate behind an ALB and
+uses RDS PostgreSQL, ElastiCache Redis, S3, ECR, Secrets Manager and CloudWatch. Public
+Fargate networking avoids NAT Gateway cost for this demo target; data services remain
+non-public and security-group restricted. Kafka, Spark and Airflow deliberately remain
+outside that module until workload evidence supports a managed or operated choice.
+Nothing has been applied, and no cloud account is required for local development.
 
 ## References
 

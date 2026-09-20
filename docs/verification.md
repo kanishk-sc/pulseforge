@@ -1,4 +1,4 @@
-# Phase 1 verification
+# Verification record
 
 Executed on **2026-09-09** on Windows with Docker Desktop's Linux engine
 (Docker Engine 29.5.2), Python 3.12.13 and uv 0.11.16. This is a functional
