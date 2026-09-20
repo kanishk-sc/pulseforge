@@ -1,4 +1,4 @@
-.PHONY: setup up down traffic lint test integration streaming streaming-test analytics-build analytics-test analytics-verify airflow airflow-verify product
+.PHONY: setup up down traffic lint test integration streaming streaming-test analytics-build analytics-test analytics-verify airflow airflow-verify product product-migrate product-detect
 setup:
 	uv sync --frozen
 	uv run python scripts/init_env.py
@@ -31,4 +31,11 @@ airflow:
 airflow-verify:
 	docker compose --profile airflow run --rm --no-deps airflow python /opt/pulseforge/scripts/verify_airflow_dag.py
 product:
-	docker compose --profile product up -d --build dashboard redis
+	docker compose --profile product run --rm --build product-migrate
+	docker compose --profile product up -d --build --wait --wait-timeout 180 redis api dashboard
+
+product-migrate:
+	docker compose --profile product run --rm --build product-migrate
+
+product-detect:
+	docker compose --profile product run --rm detector

@@ -23,6 +23,7 @@ from pulseforge.analytics import (
 from pulseforge.config import Settings
 from pulseforge.dependencies import check_dependencies
 from pulseforge.logging import configure_logging
+from pulseforge.product.api import create_product_router
 from pulseforge.telemetry import (
     ANALYTICS_QUERY_FAILURES,
     CACHE_OPERATIONS,
@@ -66,6 +67,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             await app.state.engine.dispose()
 
     app = FastAPI(title="PulseForge API", version="0.1.0", lifespan=lifespan)
+    app.include_router(create_product_router(settings))
     app.middleware("http")(observe_request)
 
     @app.middleware("http")
