@@ -1,4 +1,4 @@
-.PHONY: setup up down traffic streaming analytics orchestration lint test integration
+.PHONY: setup up down traffic lint test integration streaming streaming-test analytics-build analytics-test analytics-verify airflow airflow-verify product
 setup:
 	uv sync --frozen
 	uv run python scripts/init_env.py
@@ -8,13 +8,6 @@ down:
 	docker compose down
 traffic:
 	docker compose --profile traffic up -d producer
-streaming:
-	docker compose --profile streaming up -d --build spark
-analytics:
-	docker compose --profile analytics run --rm dbt deps --profiles-dir .
-	docker compose --profile analytics run --rm dbt build --profiles-dir . --target dev
-orchestration:
-	docker compose --profile orchestration up -d --build airflow
 lint:
 	uv run ruff format --check .
 	uv run ruff check .
@@ -22,3 +15,20 @@ test:
 	uv run pytest -m "not integration"
 integration:
 	uv run pytest -m integration --run-integration
+streaming:
+	docker compose --profile streaming up -d --build --wait --wait-timeout 240
+streaming-test:
+	uv run pytest --run-integration --run-streaming
+analytics-build:
+	docker compose --profile analytics run --rm analytics-dbt build
+analytics-test:
+	docker compose --profile analytics run --rm analytics-dbt test
+analytics-verify:
+	docker compose --profile analytics build analytics-dbt
+	uv run pytest -m analytics --run-integration --run-analytics
+airflow:
+	docker compose --profile airflow up -d --build --wait --wait-timeout 180 airflow
+airflow-verify:
+	docker compose --profile airflow run --rm --no-deps airflow python /opt/pulseforge/scripts/verify_airflow_dag.py
+product:
+	docker compose --profile product up -d --build dashboard redis

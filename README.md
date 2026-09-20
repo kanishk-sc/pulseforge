@@ -7,12 +7,11 @@ to reliable operational decisions: preserve the original event, validate its con
 process it once at the sink, model the business, detect explainable anomalies, and
 show the evidence behind an incident.
 
-The implemented path runs from synthetic events through Kafka, Spark, PostgreSQL/MinIO,
-dbt and Airflow to a cached analytics API and React operations dashboard. Prometheus
-scrapes bounded-cardinality API metrics, Grafana is provisioned from source, and
-FastAPI can export OpenTelemetry traces. Explainable anomaly detection, persisted
-incidents and the evidence-based assistant remain planned. All generated data is
-synthetic; no public deployment or performance result is claimed.
+**Current milestone: Phase 3 — analytics engineering, verified locally.**
+Kafka ingestion, Spark Structured Streaming, raw/cleaned/curated Parquet, a dead-letter
+pipeline, an idempotent PostgreSQL sink, dbt analytics and finite Airflow orchestration
+are implemented. The dashboard, anomaly detection and AI assistant remain future work.
+All generated data is synthetic.
 
 See the [implementation checklist](docs/architecture/implementation-plan.md) and
 [actual verification record](docs/verification.md).
@@ -43,19 +42,18 @@ flowchart LR
     A[FastAPI liveness and readiness] --> K
     A --> L
     A --> W[(PostgreSQL)]
-    K --> S[Spark Structured Streaming]
-    S --> D[Dead-letter topic]
-    S --> L
-    S --> W
+    K --> S[Spark archive query]
+    S --> RAW[MinIO raw Parquet]
+    RAW --> V[Spark validation and event-time deduplication]
+    V --> D[Kafka dead-letter topic]
+    V --> C[MinIO cleaned / curated Parquet]
+    V --> ST[PostgreSQL JDBC staging]
+    ST --> W
+    W --> M[Minute operational aggregates]
     W --> DBT[dbt facts / dimensions / marts]
-    AF[Airflow batch orchestration] --> DBT
-    AF --> L
-    DBT --> API[FastAPI analytics endpoints]
-    API --> R[(Redis TTL cache)]
-    API --> UI[React operations dashboard]
-    API --> P[Prometheus]
-    P --> G[Grafana]
-    API -. optional OTLP .-> O[OpenTelemetry collector]
+    AF[Airflow finite batch orchestration] --> DBT
+    DBT -. Phase 4 .-> API[Metrics and incident APIs]
+    API -.-> UI[React operations dashboard]
     RAG[Phase 6: evidence-based assistant] -.-> API
     RAG -.-> V[(pgvector runbooks)]
 ```
@@ -64,14 +62,13 @@ flowchart LR
 | --- | --- | --- |
 | Contracts / producer | Python, Pydantic, aiokafka | Implemented: versioned validation, journeys, fault injection, confirmed delivery |
 | Event backbone | Kafka in KRaft mode | Implemented: three partitions, event and dead-letter topics, seven-day retention |
-| Database | PostgreSQL, SQLAlchemy, asyncpg, psycopg | Implemented: readiness plus idempotent event and minute-metric sinks |
-| Lake | MinIO, boto3, Parquet | Implemented: lossless raw and validated cleaned stream archives |
-| API | FastAPI | Implemented: health/readiness, typed analytics and pipeline APIs, request IDs, JSON logs |
-| Processing | Spark Structured Streaming | Implemented: validation, watermark deduplication, DLQ routing and checkpoints |
-| Modeling | dbt-postgres | Implemented: event facts, observed dimensions, hourly business and quality marts |
-| Orchestration | Airflow | Implemented: analytics, quality-report and retention DAGs |
-| Product | React, TypeScript, Recharts, Redis | Implemented: real mart data, polling, TTL cache and failure states |
-| Telemetry | Prometheus, Grafana, OpenTelemetry | Implemented for the API; Spark/Kafka-native telemetry remains future work |
+| Database | PostgreSQL, SQLAlchemy, asyncpg, psycopg, JDBC | Unique stream events, transactional batch ledger and minute aggregates |
+| Lake | MinIO, S3A, Parquet | Immutable raw evidence; committed cleaned/curated batches |
+| API | FastAPI | Implemented: liveness, dependency readiness, OpenAPI, request IDs, JSON logs |
+| Streaming | Spark 4.0.1, PySpark, Kafka connector | Event-time deduplication, DLQ, checkpoint recovery and JDBC staging |
+| Modeling | dbt, Airflow | Implemented: documented facts/dimensions/marts, tests and finite hourly DAG |
+| Product | React, TypeScript, Redis | Phase 4 |
+| Telemetry | Prometheus, Grafana, OpenTelemetry | Phase 5 |
 | Assistant | pgvector, provider abstraction | Phase 6, optional paid provider, offline support |
 | Deployment | Terraform, AWS ECS/RDS/ElastiCache/S3/ECR | Validated configuration; not applied or publicly deployed |
 
@@ -94,7 +91,8 @@ OpenTelemetry, Docker Compose, Terraform, pytest and GitHub Actions.
 
 Prerequisites: Docker Desktop with Linux containers, Docker Compose v2, Git and
 [uv](https://docs.astral.sh/uv/getting-started/installation/). Allow approximately
-4 GB of Docker memory for the foundation and approximately 6 GB when Spark is enabled.
+4 GB of Docker memory for the foundation and 8 GB when running Spark and Airflow
+together.
 Commands work in PowerShell and Bash unless noted.
 
 ```sh
@@ -120,81 +118,12 @@ or application authentication, and must not be exposed to the Internet.
 | S3 endpoint | http://localhost:9000 |
 | Kafka bootstrap | localhost:9092 |
 | PostgreSQL | localhost:5432 |
-| Spark streaming UI | http://localhost:4040 (while the streaming profile is running) |
-| Airflow | http://localhost:8080 (while the orchestration profile is running) |
-| Operations dashboard | http://localhost:5173 (with the product profile) |
-| Prometheus | http://localhost:9090 (with the observability profile) |
-| Grafana | http://localhost:3000 (with the observability profile) |
+| Airflow UI (optional profile) | http://localhost:8080 |
 
 Initialization creates `commerce.events.v1`, `commerce.dead-letter.v1`, and the
-`pulseforge` bucket. It is safe to rerun. The Spark application creates its two
-`analytics` tables and staging tables idempotently at startup.
-
-### Environment variables
-
-`.env.example` is the source of truth. `POSTGRES_PASSWORD` and
-`MINIO_ROOT_PASSWORD` are required local secrets generated by `scripts/init_env.py`.
-Traffic, watermark, trigger, retention and cache TTL settings have safe development
-defaults. `OTEL_EXPORTER_OTLP_ENDPOINT` is optional and blank by default. Grafana's
-default password is local-only; override `GRAFANA_ADMIN_PASSWORD` when enabling that
-profile. Never commit `.env` or Terraform state.
-
-### Run the streaming pipeline
-
-Start Spark explicitly; the default stack remains useful for foundation-only work:
-
-```sh
-docker compose --profile streaming up -d --build spark
-docker compose logs -f spark
-```
-
-Spark starts five checkpointed queries. Every Kafka value is archived losslessly under
-`raw/stream_events`; valid events are deduplicated by `event_id`, archived under
-`cleaned/stream_events`, inserted into `analytics.stream_events`, and aggregated into
-`analytics.stream_metrics_minute`. Invalid records go to `commerce.dead-letter.v1`
-with stable reason codes, source offsets, decoded text when available, and base64 bytes.
-The raw archive is intentionally at-least-once evidence; accepted warehouse rows are
-idempotent through primary and source-offset constraints.
-
-Inspect the stream outputs:
-
-```sh
-docker compose exec postgres psql -U pulseforge -d pulseforge -c "TABLE analytics.stream_metrics_minute;"
-docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server kafka:29092 --topic commerce.dead-letter.v1 --from-beginning --max-messages 5
-```
-
-### Build analytics models
-
-The analytics profile runs dbt in a pinned container, so a host dbt installation is
-optional. It builds 14 models and 43 tests against the populated stream warehouse:
-
-```sh
-docker compose --profile analytics build dbt
-docker compose --profile analytics run --rm dbt deps --profiles-dir .
-docker compose --profile analytics run --rm dbt build --profiles-dir . --target dev
-```
-
-Facts preserve event grain: payment rows are attempts, shipment delays are signals, and
-refunds are requests rather than completed refunds. Expected orphan relationships caused
-by deliberate transport corruption are warnings and are also materialized in
-`analytics_dbt.mart_data_quality_hourly`; they are never filtered away to make tests green.
-
-### Run scheduled analytics
-
-Start the local Airflow standalone service explicitly:
-
-```sh
-docker compose --profile orchestration up -d --build airflow
-docker compose logs airflow
-```
-
-The first log output includes the generated local administrator password. The three
-DAGs verify source freshness and build/test dbt models every 15 minutes, write an
-hourly JSON quality summary from dbt's actual `run_results.json`, and inspect lake
-objects daily for retention. Retention is a dry run by default; set
-`LAKE_RETENTION_DRY_RUN=false` only after reviewing the candidate policy. Airflow does
-not own the long-running Spark consumer. This SQLite-backed standalone configuration
-is for local demonstration, not a production control plane.
+`pulseforge` bucket. It is safe to rerun. Starting streaming also runs the idempotent
+`warehouse.sql` schema initialization. dbt reads those Phase 2 tables without changing
+their schema or sink semantics.
 
 ### Generate and inspect events
 
@@ -231,10 +160,96 @@ test; use a different seed for a new independent simulation.
 
 `ANOMALY_RATE` controls transport corruption: duplicate records, malformed JSON and
 missing event IDs. Business spikes are separate scenario parameters. Invalid records
-enter the event topic intentionally. Spark preserves every record in the raw lake and
-routes rejected inputs to the dead-letter topic; it never treats a business spike as
-malformed transport data. The generator validates good events before serializing them,
-then corrupts selected bytes deliberately.
+enter the event topic intentionally; Spark archives them and routes them to the
+dead-letter topic. The generator validates good events before
+serializing them, then corrupts selected bytes deliberately.
+
+### Start and inspect streaming
+
+Spark runs behind a profile so the lightweight API/foundation remains independent.
+Allow Docker approximately 6 GB of memory for the combined platform. The streaming
+container is capped at 3 GB and uses `local[2]`, not a pretend distributed cluster.
+The first image build downloads Spark and its pinned JVM dependencies.
+
+```sh
+docker compose --profile streaming up -d --build --wait --wait-timeout 240
+docker compose logs -f streaming
+docker compose run --rm -e ANOMALY_RATE=0.25 producer python -m pulseforge.producer --count 100
+docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server kafka:29092 --topic commerce.dead-letter.v1 --from-beginning --max-messages 5
+uv run python -m pulseforge.streaming.inspect --layer raw --limit 3
+uv run python -m pulseforge.streaming.inspect --layer cleaned --limit 3
+uv run python -m pulseforge.streaming.inspect --layer curated --limit 3
+docker compose exec postgres psql -U pulseforge -d pulseforge -c "SELECT event_type,count(*) FROM stream_events GROUP BY 1;"
+docker compose exec postgres psql -U pulseforge -d pulseforge -c "SELECT * FROM stream_metrics_minute ORDER BY window_start DESC LIMIT 10;"
+```
+
+The SQL examples use the default local username/database; substitute values from `.env`
+if changed. In MinIO's console, browse the `pulseforge` bucket: `raw/v1`, `cleaned/v1`,
+`curated/v1`, `commits/v1`, and `checkpoints/`. The host inspection command uses PyArrow
+from the development dependencies and reads **committed files only**. It loads the
+small demo dataset into memory; it is not a production query engine. Do not recursively
+scan arbitrary lake files as though in-progress attempts were committed data.
+
+To restart safely without discarding offsets or deduplication state:
+
+```sh
+docker compose stop streaming
+docker compose --profile streaming up -d --wait --wait-timeout 180 streaming
+```
+
+All three checkpoints live in MinIO. Retain the checkpoint and lake metadata together.
+On a correctness-critical sink failure Spark exits; restore the dependency and use the
+same restart command. It does not auto-restart forever and conceal a failed sink.
+
+The ten-minute watermark bounds the live deduplication state. Very late records can be
+excluded from live cleaned/warehouse output; their bytes remain in raw and Spark logs
+the dropped count. Planned offline reconciliation must use the raw archive. Do not
+delete a checkpoint to repair a transient outage. Read [failure semantics](docs/architecture/phase-2-design.md)
+before changing namespaces or planning a backfill.
+
+### Build and schedule analytics
+
+dbt runs in an opt-in, short-lived container. It reads the Phase 2 `public` source
+tables and creates `analytics_staging`, `analytics_core` and `analytics_marts`:
+
+```sh
+docker compose --profile analytics build analytics-dbt
+docker compose --profile analytics run --rm analytics-dbt build
+docker compose --profile analytics run --rm analytics-dbt test
+```
+
+`dbt build` is the normal command because it runs models and tests in dependency
+order. Running `dbt test` separately is useful after inspecting or changing data.
+The event staging table captures one committed source snapshot per full build.
+Events accepted afterward enter the next build. Facts merge on their source event UUID;
+repeating a run or replaying an accepted UUID
+does not increase the fact grain. Accepted late arrivals are included on the next run.
+Run one analytics build per target schema at a time, including manual runs alongside
+Airflow. The project is mounted read-only; CLI target artifacts and logs live in the
+short-lived container under `/tmp/dbt-target` and `/tmp/dbt-logs`. Standard output
+remains available to the caller. Airflow retains its own build artifacts for the summary.
+
+Airflow is also optional. It runs the same finite build every hour and never starts,
+stops or retries Spark:
+
+```sh
+docker compose --profile airflow up -d --build --wait --wait-timeout 180 airflow
+docker compose exec airflow cat /opt/airflow/state/simple_auth_manager_passwords.json.generated
+```
+
+Open http://localhost:8080 and sign in as `pulseforge` with the generated password.
+The password file is stored only in the ignored Airflow state volume; no default
+password is committed. The DAG's path is `verify_warehouse -> dbt_build ->
+quality_summary`. Trigger it in the UI, or perform a finite local verification with:
+
+```sh
+docker compose --profile airflow run --rm --no-deps airflow python /opt/pulseforge/scripts/verify_airflow_dag.py
+docker compose exec airflow airflow dags test pulseforge_analytics 2026-09-09T18:00:00+00:00
+```
+
+The second command creates a real local Airflow test run for the supplied logical
+timestamp and writes analytics data. See the [Phase 3 design](docs/architecture/phase-3-design.md)
+for model grains, metric denominators and failure/recovery behavior.
 
 ### Example API usage
 
@@ -275,18 +290,24 @@ otherwise disabled without affecting requests.
 ```sh
 uv run ruff format --check .
 uv run ruff check .
-uv run pytest -m "not integration"
-docker compose --profile streaming up -d --build --wait --wait-timeout 240
-uv run pytest -m integration --run-integration
+uv run pytest -m "not integration" --basetemp=.pytest_cache/unit-tmp
+uv run pytest -m integration --run-integration --basetemp=.pytest_cache/integration-tmp
+uv run pytest --run-integration --run-streaming --basetemp=.pytest_cache/streaming-tmp
+uv run pytest -m analytics --run-integration --run-analytics --basetemp=.pytest_cache/analytics-tmp
+uv run pytest --run-integration --run-streaming --run-analytics --basetemp=.pytest_cache/full-tmp
 ```
 
-The integration command requires the streaming Compose profile. It verifies Kafka
-delivery/readback, S3 write/read/delete, PostgreSQL transactions, API readiness,
-repeated bootstrap, and valid/invalid events across every Spark sink.
-Integration tests skip by default rather than silently pretending to use real services.
-CI runs lint, unit/API tests, the TypeScript type-check/audit/build, Docker builds, the
-real Compose integration suite, dbt, Airflow import validation and all three Airflow
-DAG test runs without private secrets or cloud credentials.
+The second pytest command requires Compose. It verifies Kafka delivery/readback,
+S3 write/read/delete, PostgreSQL transactions, API readiness and repeated bootstrap.
+The streaming flag additionally exercises actual CLI producer → Spark → lake/warehouse,
+DLQ payload fidelity, duplicates, minute totals, watermark drops, restart and database
+outage/recovery. These tests intentionally stop/restart local services: run against a
+development stack, without another traffic generator. Integration tests skip by default.
+The analytics flag creates a disposable database with the exact Phase 2 schema, loads
+deterministic events through the real sink, runs dbt twice and checks exact facts,
+marts, lineage and replay stability. CI keeps the Python, streaming and analytics jobs
+independent and requires no private secrets. All three jobs passed in
+[Phase 3 hosted CI](https://github.com/kanishk-sc/pulseforge/actions/runs/35117743583).
 
 For host API development, stop the container API first, then run:
 
@@ -295,9 +316,11 @@ docker compose stop api
 uv run uvicorn pulseforge.api:app --reload --no-access-log
 ```
 
-`make setup`, `make up`, `make traffic`, `make lint`, `make test` and `make integration`
-are optional shortcuts when Make is installed. The explicit commands above work on
-Windows without Make. `docker compose down` stops the stack and preserves its data.
+`make setup`, `make up`, `make traffic`, `make lint`, `make test`, `make integration`,
+`make analytics-build`, `make analytics-test`, `make analytics-verify`, `make airflow`
+and `make airflow-verify` are optional shortcuts when Make is installed. The explicit
+commands above work on Windows without Make. `docker compose down` stops the stack and
+preserves its data.
 
 ## Data models and event flow
 
@@ -306,36 +329,22 @@ The current source contract is `src/pulseforge/events.py`, exported as JSON Sche
 timestamp bounds, per-type required fields and inventory quantity rules. JSON Schema
 alone cannot express all of those checks; consumers must use the runtime validator.
 
-The stream warehouse uses event-grain staging with `event_id` and Kafka-position
-uniqueness. Transactional staging cleanup plus `ON CONFLICT DO NOTHING` makes retrying
-a partially failed microbatch safe. The dbt layer adds customer/product/region
-dimensions and business facts for orders/payments/shipments/refunds while retaining
-source event references. Its marts calculate hourly revenue, payment failure rates,
-shipment performance, refunds, operational health and data-quality signals with
-explicit denominators. See [design decisions](docs/architecture/architecture.md).
-
-## Repository structure
-
-| Path | Responsibility |
-| --- | --- |
-| `src/pulseforge` | Contracts, producer, streaming support, API, analytics and telemetry |
-| `streaming` | Spark Structured Streaming job and sink logic |
-| `analytics/dbt` | Staging, facts, dimensions, marts and data tests |
-| `orchestration/dags` | Airflow analytics, quality and retention workflows |
-| `frontend` | React/TypeScript operations dashboard and Nginx proxy |
-| `observability` | Prometheus and provisioned Grafana configuration |
-| `infra` | Docker images, isolated test override and validated Terraform target |
-| `tests` | Unit, API and opt-in infrastructure integration tests |
+The analytics warehouse uses event-grain staging with `event_id` uniqueness, Type 1
+customer/product dimensions, a fixed region dimension and source-lineage facts for
+orders, payment attempts, created shipments and refund requests. Hourly marts calculate
+successful-payment revenue, payment failure rates, created-shipment cohort delay rates,
+refund requests and combined operational features. Exact grains and denominators are
+documented in the [Phase 3 design](docs/architecture/phase-3-design.md).
 
 ## Observability and AI
 
-API, producer and streaming application logs are JSON. API responses include a
-validated or generated request ID. Prometheus records request totals and latency using
-route templates rather than raw URLs, plus cache outcomes and warehouse-query failures.
-Grafana visualizes those signals. OpenTelemetry instruments FastAPI and exports over
-OTLP/HTTP only when configured. Dependency failures remain visible through readiness,
-independent of liveness. Kafka consumer lag and Spark-native metrics are not yet wired
-into this monitoring stack.
+API, producer and streaming application logs are JSON; Spark's JVM logs retain their
+native diagnostic format. API responses include a validated or generated request ID.
+Producer logs distinguish acknowledged events from a failed delivery. Streaming logs
+report batch input/insert counts and watermark drops. The Spark container health check
+reports live query threads, not an end-to-end latency or freshness guarantee.
+Dependency failures are visible through readiness, independent of API liveness.
+Phase 5 adds metrics and traces after the pipeline has meaningful measurements.
 
 The planned assistant retrieves runbooks, incident evidence and recent metrics before
 responding. Statistical detection remains outside the LLM. The main platform will
@@ -383,12 +392,7 @@ concurrency, throughput, p50/p95/p99 and error rate.
 - The dashboard contains no fake values and exposes upstream empty/error conditions.
 - Terraform models an interview-defensible deployment boundary without applying paid infrastructure.
 
-The highest-value next work is an explainable anomaly-to-incident flow, native
-Kafka/Spark telemetry, browser tests, and measured failure/load experiments. The AI
-assistant should follow only when there are runbooks and incidents worth retrieving.
-
-## Future work
-
-Implement the anomaly-to-incident path first, then add native Kafka/Spark telemetry and
-repeatable failure/load experiments. Browser coverage and frontend code splitting are
-smaller follow-ups. Retrieval-grounded assistance remains intentionally last.
+Next is Phase 4: operational APIs, explainable anomaly detectors and the dashboard.
+Subsequent phases add
+observability and evidence-based AI. Kubernetes and AWS Terraform follow only after
+the local application works; no paid infrastructure is created automatically.

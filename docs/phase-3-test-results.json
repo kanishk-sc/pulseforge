@@ -1,0 +1,444 @@
+{
+  "executed_on": "2026-09-16",
+  "code_commit": "e53eb5c21025444e0b7ec78ff51d4533e378edb4",
+  "command": "uv run pytest --run-integration --run-streaming --run-analytics --basetemp=.pytest_cache/full-tmp --junitxml=phase3-review-results.xml",
+  "counts": {
+    "tests": 86,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "duration_seconds": 235.17,
+  "cases": [
+    {
+      "class": "tests.test_analytics_integration",
+      "name": "test_exact_hourly_business_metrics",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_analytics_integration",
+      "name": "test_fact_grains_dimensions_and_shipment_semantics",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_analytics_integration",
+      "name": "test_replay_and_repeated_build_do_not_inflate_analytics",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_analytics_integration",
+      "name": "test_snapshot_late_arrivals_and_quality_failure",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_analytics_quality",
+      "name": "test_summarize_dbt_results_counts_statuses",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_analytics_quality",
+      "name": "test_summarize_dbt_results_counts_failures",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_analytics_quality",
+      "name": "test_summarize_rejects_missing_results",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_analytics_quality",
+      "name": "test_summary_does_not_report_incomplete_build_as_success[statuses0]",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_analytics_quality",
+      "name": "test_summary_does_not_report_incomplete_build_as_success[statuses1]",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_analytics_quality",
+      "name": "test_summary_does_not_report_incomplete_build_as_success[statuses2]",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_analytics_quality",
+      "name": "test_summary_does_not_report_incomplete_build_as_success[statuses3]",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_analytics_quality",
+      "name": "test_summary_rejects_malformed_results[payload0]",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_analytics_quality",
+      "name": "test_summary_rejects_malformed_results[payload1]",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_api",
+      "name": "test_liveness_does_not_need_services",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_api",
+      "name": "test_untrusted_request_id_is_replaced",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_api",
+      "name": "test_readiness_reports_dependency_failure[up-200]",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_api",
+      "name": "test_readiness_reports_dependency_failure[down-503]",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_api",
+      "name": "test_unexpected_exception_does_not_expose_details",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_api",
+      "name": "test_openapi_describes_health_endpoints",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_events",
+      "name": "test_reject_invalid_contract[event_id-None]",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_events",
+      "name": "test_reject_invalid_contract[event_id-bad-uuid]",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_events",
+      "name": "test_reject_invalid_contract[customer_id-]",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_events",
+      "name": "test_reject_invalid_contract[customer_id-None]",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_events",
+      "name": "test_reject_invalid_contract[order_id-None]",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_events",
+      "name": "test_reject_invalid_contract[product_id-None]",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_events",
+      "name": "test_reject_invalid_contract[amount--1.00]",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_events",
+      "name": "test_reject_invalid_contract[amount-1.001]",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_events",
+      "name": "test_reject_invalid_contract[amount-NaN]",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_events",
+      "name": "test_reject_invalid_contract[amount-None]",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_events",
+      "name": "test_reject_invalid_contract[event_type-unknown]",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_events",
+      "name": "test_reject_invalid_contract[schema_version-2]",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_events",
+      "name": "test_reject_invalid_contract[status-paid]",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_events",
+      "name": "test_reject_invalid_contract[region-unknown]",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_events",
+      "name": "test_reject_invalid_contract[currency-EUR]",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_events",
+      "name": "test_reject_invalid_contract[timestamp-2026-01-01T12:00:00]",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_events",
+      "name": "test_reject_invalid_contract[timestamp-1900-01-01T00:00:00Z]",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_events",
+      "name": "test_reject_invalid_contract[timestamp-2026-09-17T15:41:15.651496+00:00]",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_events",
+      "name": "test_reject_unknown_field",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_events",
+      "name": "test_serialization_preserves_money",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_events",
+      "name": "test_archived_validation_clock_is_explicit_and_does_not_change_default",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_events",
+      "name": "test_type_specific_requirements[payment_processed-payment_provider-None]",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_events",
+      "name": "test_type_specific_requirements[shipment_created-shipment_provider-None]",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_events",
+      "name": "test_type_specific_requirements[inventory_updated-metadata-value2]",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_events",
+      "name": "test_type_specific_requirements[inventory_updated-metadata-value3]",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_events",
+      "name": "test_type_specific_requirements[inventory_updated-metadata-value4]",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_generator",
+      "name": "test_seeded_generation_is_reproducible_and_covers_contract",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_generator",
+      "name": "test_journeys_preserve_identity_and_only_ship_paid_orders",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_generator",
+      "name": "test_payment_scenario_materially_increases_failure_rate",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_generator",
+      "name": "test_corruption_emits_duplicates_malformed_and_missing_ids",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_integration",
+      "name": "test_live_api_readiness",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_integration",
+      "name": "test_bootstrap_is_idempotent",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_integration",
+      "name": "test_postgres_transaction",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_integration",
+      "name": "test_s3_object_roundtrip",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_integration",
+      "name": "test_kafka_delivery_and_readback",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_producer",
+      "name": "test_finite_producer_confirms_each_record_and_closes",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_producer",
+      "name": "test_delivery_failure_is_not_silently_retried",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_producer",
+      "name": "test_startup_retries_broker_unavailable",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_producer",
+      "name": "test_startup_retries_are_bounded",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_producer",
+      "name": "test_shutdown_stops_before_next_record",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_producer_integration",
+      "name": "test_real_producer_cli_to_kafka_and_contract",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_stream_validation",
+      "name": "test_valid_record_normalizes_without_losing_money",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_stream_validation",
+      "name": "test_safe_rejection_codes[{broken-malformed_json]",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_stream_validation",
+      "name": "test_safe_rejection_codes[\\xff-malformed_json]",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_stream_validation",
+      "name": "test_safe_rejection_codes[None-other_validation]",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_stream_validation",
+      "name": "test_safe_rejection_codes[[]-other_validation]",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_stream_validation",
+      "name": "test_safe_rejection_codes[{}-missing_event_id]",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_stream_validation",
+      "name": "test_safe_rejection_codes[{\"metadata\":{\"bad\":NaN}}-malformed_json]",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_stream_validation",
+      "name": "test_safe_rejection_codes[{\"event_id\":\"some-id\",\"event_type\":\"bad\"}-invalid_event_type]",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_stream_validation",
+      "name": "test_safe_rejection_codes[{\"event_id\":\"some-id\",\"event_type\":[]}-invalid_event_type]",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_stream_validation",
+      "name": "test_contract_failure_classification[schema_version-99-schema_validation]",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_stream_validation",
+      "name": "test_contract_failure_classification[event_id-private-untrusted-value-schema_validation]",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_stream_validation",
+      "name": "test_contract_failure_classification[status-private-untrusted-value-invalid_business_fields]",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_stream_validation",
+      "name": "test_validation_uses_archived_clock_on_replay",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_stream_validation",
+      "name": "test_reject_unsafe_table_name[events; DROP TABLE events]",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_stream_validation",
+      "name": "test_reject_unsafe_table_name[stage_x]",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_stream_validation",
+      "name": "test_reject_unsafe_table_name[]",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_stream_validation",
+      "name": "test_reject_unsafe_table_name[public.stage_123]",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_stream_validation",
+      "name": "test_staging_identity_is_stable_and_generation_specific",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_streaming_integration",
+      "name": "test_actual_producer_reaches_raw_cleaned_curated_and_warehouse",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_streaming_integration",
+      "name": "test_duplicates_preserve_both_sources_but_one_logical_event",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_streaming_integration",
+      "name": "test_invalid_input_preserved_and_delivered_to_dlq",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_streaming_integration",
+      "name": "test_minute_aggregates_equal_unique_event_time_totals",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_streaming_integration",
+      "name": "test_watermark_excludes_late_event_but_retains_raw_and_reports_drop",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_streaming_integration",
+      "name": "test_checkpoint_restart_retains_identity_and_dedup_state",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_streaming_integration",
+      "name": "test_postgres_outage_fails_stream_and_recovers_uncommitted_input",
+      "outcome": "passed"
+    },
+    {
+      "class": "tests.test_warehouse_integration",
+      "name": "test_schema_and_transactional_sink_replay",
+      "outcome": "passed"
+    }
+  ]
+}

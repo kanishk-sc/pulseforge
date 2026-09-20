@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import json
 from contextlib import closing
 from uuid import uuid4
@@ -101,7 +102,7 @@ async def test_streaming_pipeline_to_all_sinks():
                     "Contents", []
                 )
             )
-            for prefix in ("raw/stream_events/", "cleaned/stream_events/")
+            for prefix in ("raw/v1/", "cleaned/v1/")
         }
 
     producer = AIOKafkaProducer(
@@ -136,7 +137,7 @@ async def test_streaming_pipeline_to_all_sinks():
                 async with engine.connect() as connection:
                     result = await connection.execute(
                         text(
-                            "SELECT count(*) FROM analytics.stream_events "
+                            "SELECT count(*) FROM stream_events "
                             "WHERE event_id = CAST(:event_id AS uuid)"
                         ),
                         {"event_id": str(event.event_id)},
@@ -158,9 +159,10 @@ async def test_streaming_pipeline_to_all_sinks():
             except TimeoutError:
                 continue
             envelope = json.loads(record.value)
-            if token in envelope["raw_value"]:
-                assert "invalid_event_id" in envelope["validation_errors"]
-                assert envelope["raw_payload_base64"]
+            decoded = json.loads(base64.b64decode(envelope["payload_base64"]))
+            if token == decoded["metadata"].get("integration_token"):
+                assert envelope["error_code"] == "missing_event_id"
+                assert envelope["payload_base64"]
                 break
         else:
             pytest.fail("invalid event did not reach the dead-letter topic")

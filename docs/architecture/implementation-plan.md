@@ -3,7 +3,7 @@
 PulseForge is a synthetic commerce/logistics operations platform. Build and verify
 each milestone before expanding its scope. Checkmarks mean verified, not scaffolded.
 
-## 1. Foundation
+## 1. Foundation (complete)
 - [x] Architecture, local setup, failure semantics and repository conventions
 - [x] Versioned Pydantic event contracts for all eight event types
 - [x] Seeded, correlated event generator with explicit anomaly scenarios
@@ -14,24 +14,30 @@ each milestone before expanding its scope. Checkmarks mean verified, not scaffol
 - [x] Lint, tests, image builds and live foundation smoke test
 - [x] Stable foundation commit (`c0b1884`)
 
-## 2. Streaming data platform
-- [x] Spark Kafka consumer with independent checkpoints and verified restart recovery
-- [x] Preserve raw bytes, strict schema validation and stable dead-letter reasons
+## 2. Streaming data platform (complete)
+- [x] Spark Kafka consumer with checkpoints and replay tests
+- [x] Preserve raw bytes, schema validation and dead-letter reasons
 - [x] Watermark-aware deduplication plus warehouse uniqueness for durable idempotency
-- [x] Processing-latency enrichment and raw/cleaned Parquet on S3-compatible storage
-- [x] Transactional warehouse writes and one-minute regional aggregates
-- [x] Test transformations and live Kafka-to-PostgreSQL/MinIO/dead-letter delivery
-- [x] Manually verify deterministic duplicate replay and checkpoint restart recovery
-- [ ] Automate deliberate sink-outage drills
-- [ ] Curated Parquet models (Phase 3 owns business semantics and transform versioning)
+- [x] Enrichment and raw/cleaned/curated Parquet on S3-compatible storage
+- [x] Transactional warehouse writes and window aggregates
+- [x] Test duplicate replay, malformed payloads, restarts and sink outages
 
-## 3. Analytics engineering
-- [x] dbt facts: orders, payment attempts, shipment events and refund requests
-- [x] Dimensions: customer, product, region; marts: revenue, failures, shipments, refunds, health and data quality
-- [x] dbt relationships, uniqueness, accepted values and business-rule tests
-- [x] Airflow ingestion-freshness, transformations, quality reporting, aggregation and retention DAGs
-- [x] Execute dbt against populated warehouse (55 pass, 2 intentional relationship warnings)
-- [x] Validate all Airflow DAG imports and task execution against the local stack
+Verified on 2026-09-09: 73 local tests on fresh volumes; hosted CI passed 59
+unit/API/schema tests and 14 live integration tests. See [evidence](../verification.md).
+Phase 3 evidence is recorded separately below.
+
+## 3. Analytics engineering (complete)
+- [x] dbt facts: orders, payment attempts, created shipments and refund requests
+- [x] Type 1 customer/product and fixed region dimensions; five hourly operational marts
+- [x] Source, relationship, uniqueness, accepted-value and singular business-rule tests
+- [x] Finite Airflow warehouse verification → dbt build → quality-summary DAG; Spark excluded
+- [x] Deterministic populated-warehouse, replay, rerun and real Airflow DAG validation
+
+Re-verified on 2026-09-16: 68 non-integration tests, four deterministic analytics
+tests, 109 successful dbt build results, a successful real Airflow DAG run and 86
+full local tests including every Phase 2 streaming recovery case. Hosted CI passed
+all three jobs after correcting the MinIO registry reference. See [design](phase-3-design.md) and
+[evidence](../verification.md). Phase 4 and later remain unimplemented.
 
 ## 4. Product layer
 - [x] Typed metrics, pipeline and quality APIs backed by dbt marts

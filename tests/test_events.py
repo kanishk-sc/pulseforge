@@ -55,6 +55,14 @@ def test_serialization_preserves_money(order):
     assert event.model_dump(mode="json")["amount"] == "123.45"
 
 
+def test_archived_validation_clock_is_explicit_and_does_not_change_default(order):
+    assert CommerceEvent.model_validate(order)
+    with pytest.raises(ValidationError, match="timestamp outside supported range"):
+        CommerceEvent.model_validate(
+            order, context={"reference_time": datetime.now(UTC) - timedelta(hours=1)}
+        )
+
+
 @pytest.mark.parametrize(
     "kind,field,value",
     [

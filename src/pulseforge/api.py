@@ -8,7 +8,7 @@ from uuid import uuid4
 from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from redis.asyncio import Redis, from_url
 from redis.exceptions import RedisError
 from sqlalchemy.exc import SQLAlchemyError
@@ -37,7 +37,7 @@ class HealthResponse(BaseModel):
     status: Literal["ok", "degraded"]
     service: str = "pulseforge-api"
     version: str = "0.1.0"
-    dependencies: dict[str, str] = {}
+    dependencies: dict[str, str] = Field(default_factory=dict)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:

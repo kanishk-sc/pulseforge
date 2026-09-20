@@ -3,7 +3,10 @@
 ## Scope and constraints
 
 PulseForge uses entirely synthetic commerce/logistics data. Phase 1 establishes a
-working ingestion boundary and a verified streaming processor. The seven-phase
+working ingestion boundary. Phase 2 adds the [streaming implementation](phase-2-design.md),
+including sink, checkpoint, watermark and recovery semantics. Phase 3 adds the
+[analytics implementation](phase-3-design.md), including exact model grains, metric
+denominators, idempotent rebuilds and finite orchestration. The seven-phase
 [plan](implementation-plan.md) distinguishes implemented code from future architecture.
 The design prioritizes reproducibility, explicit failure behavior and useful tests.
 
@@ -39,8 +42,7 @@ quantity. Unknown fields and unsupported versions fail validation rather than si
 changing meaning. Replay older than 2020 is outside this synthetic contract.
 
 Schemas alone do not detect duplicate delivery or plausible-but-wrong business values.
-Spark tracks duplicates at the stream boundary and PostgreSQL enforces durable event
-and source-position uniqueness. Duplicates must be measured,
+Phase 2 handles those at the stream/sink boundaries. Duplicates must be measured,
 not confused with malformed records. Large transactions remain valid; detection is a
 business decision rather than a schema rule. JSON Schema is generated from the model,
 but cross-field/time-dependent checks remain runtime Python validation.
@@ -48,32 +50,25 @@ but cross-field/time-dependent checks remain runtime Python validation.
 ## Streaming versus batch, and Spark's role
 
 Spark Structured Streaming handles continual microbatches from Kafka, event-time
-windows, processing-latency enrichment and checkpointed offsets. It is chosen to demonstrate distributed
+windows, enrichment and checkpointed offsets. It is chosen to demonstrate distributed
 processing semantics and unified Parquet transformations, not because the local
 generator requires a cluster. A simpler consumer would be cheaper at this local scale.
 
-Five independently checkpointed queries archive every raw Kafka value, publish rejected
-records, archive accepted records, upsert event rows and upsert one-minute regional
-metrics. A ten-minute event-time watermark bounds duplicate state. PostgreSQL primary
-and unique constraints remain the durable idempotency boundary because Spark cannot
-atomically commit Kafka offsets, object storage and PostgreSQL together.
-
-Airflow schedules finite work: source-freshness checks, ordered dbt builds, quality
-reporting and bounded retention cleanup. It does not loop as the streaming consumer.
-Spark checkpoints own streaming progress; Airflow task retries own batch recovery.
-The local Airflow deployment uses SQLite and the standalone executor for a reproducible
-single-machine demo. A production deployment needs an external metadata database,
-distributed execution, authentication and separately scoped service credentials.
+Airflow schedules one finite hourly chain: verify the warehouse connection, run the
+complete dbt build and tests, then summarize machine-readable quality results. It does
+not loop as the streaming consumer or manage Spark. Spark checkpoints own streaming
+progress; bounded Airflow task retries own analytics recovery. Runbook ingestion and
+retention cleanup remain out of scope.
 
 ## Lake layers and AWS portability
 
-The foundation provisions the `pulseforge` S3-compatible bucket. Streaming writes:
+The foundation provisions the `pulseforge` S3-compatible bucket. Phase 2 writes:
 
 | Prefix | Meaning | Replay/quality behavior |
 | --- | --- | --- |
 | `raw/` | Original Kafka payload plus topic, partition, offset and ingest timestamp | Preserve malformed bytes too; never silently discard evidence |
 | `cleaned/` | Valid, normalized, enriched events in Parquet | Keep schema version and event ID; explicit rejection reasons elsewhere |
-| `curated/` | Reserved for future compacted lake aggregates | Current business marts are rebuilt in PostgreSQL by dbt |
+| `curated/` | Normalized events with date/hour and operational flags | Minute aggregates are stored in PostgreSQL |
 
 Raw data is partitioned by ingestion date/topic; cleaned data by event date/type. The
 raw archive retains binary bytes, decoded text, Kafka coordinates and validation output.
@@ -84,7 +79,7 @@ MinIO root keys. Phase 1 uses local credentials only; IAM support belongs with A
 deployment work. MinIO is pinned to a published community image for the local demo;
 review upstream security fixes and licensing before any production deployment.
 
-## Warehouse ingestion and planned modeling
+## Warehouse modeling
 
 The stream sink stores durable event IDs with a primary key and source positions with a
 unique constraint. Each microbatch first loads an unlogged staging table, then merges
@@ -94,14 +89,21 @@ checkpoint alone cannot provide exactly-once behavior across multiple external s
 Write each sink idempotently and reconcile partial progress on replay. Avoid claiming
 a distributed transaction between Kafka, Parquet and PostgreSQL.
 
-dbt staging normalizes source events; implemented dimensions represent customer, product
-and region. Facts represent orders, payment attempts, shipment events and refund requests. Event
-grain must remain explicit: a shipment delay is not another shipment, and a refund
-request is not a completed refund. Marts must name those semantics and define the
-denominator of every rate. Hourly marts currently cover revenue, payment failures,
-shipment signals, refund requests, operational health and orphan-event quality. Initial
-dimensions use Type 1 observed rollups; historical
-attribute tracking should be introduced only when a real analytical question needs it.
+dbt staging preserves the complete Phase 2 event source in a table snapshot and
+exposes minute metrics as a view. Downstream models share the captured event set
+while Spark continues ingesting. Hour bucketing explicitly uses UTC.
+Type 1 dimensions represent observed customer/product IDs and the four contract regions.
+Facts represent order creation, payment results, shipment creation and refund requests,
+with every row linked to its source event UUID. A shipment delay updates attributes on
+the created shipment instead of creating another shipment. A refund request is not a
+completed refund.
+
+Revenue sums successful payments only. Payment failure rate divides failed results by
+all processed plus failed attempts. Delayed shipment rate divides shipment creations
+with at least one delay by all creations in the same creation-hour cohort. Marts name
+those semantics, use UTC event-time hours and retain null when no denominator exists.
+The combined health mart is a feature table, not anomaly detection. See the
+[Phase 3 design](phase-3-design.md) for the full model table and late-arrival behavior.
 
 ## API, caching and failures
 

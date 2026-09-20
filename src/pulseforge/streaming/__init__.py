@@ -1,1 +1,1 @@
-"""Spark Structured Streaming pipeline for PulseForge commerce events."""
+"""Checkpointed Kafka → immutable raw → validated lake and warehouse processing."""

@@ -1,0 +1,34 @@
+version: 2
+
+models:
+  - name: stg_stream_events
+    description: >-
+      Typed, lossless table snapshot of the Phase 2 durable event table. Grain is one logical
+      event per event_id. Event, source, and ingestion timestamps remain separate;
+      hourly metrics explicitly bucket timestamptz values in UTC. Arrivals after this
+      table is captured enter downstream models on the next full build.
+    columns:
+      - name: event_id
+        description: Contract event UUID.
+        data_tests: [unique, not_null]
+      - name: metadata
+        description: Contract metadata preserved as JSONB without attribute invention.
+        data_tests: [not_null]
+      - name: currency
+        description: Contract currency code.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [USD]
+  - name: stg_stream_metrics_minute
+    description: >-
+      Typed view of Phase 2's transactional minute metrics. Grain is one UTC minute
+      and event type. total_amount is an event-type sum and must not be labeled revenue.
+    columns:
+      - name: event_count
+        description: Durable event count for the minute and event type.
+        data_tests: [not_null]
+      - name: total_amount
+        description: Event-type amount sum, not a revenue measure.
+        data_tests: [not_null]

@@ -1,0 +1,303 @@
+{
+  "date": "2026-09-09",
+  "environment": "Windows + Docker Desktop Linux, fresh named volumes",
+  "command": "uv run pytest --run-integration --run-streaming",
+  "tests": 73,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 0,
+  "test_cases": [
+    {
+      "module": "tests.test_api",
+      "name": "test_liveness_does_not_need_services"
+    },
+    {
+      "module": "tests.test_api",
+      "name": "test_untrusted_request_id_is_replaced"
+    },
+    {
+      "module": "tests.test_api",
+      "name": "test_readiness_reports_dependency_failure[up-200]"
+    },
+    {
+      "module": "tests.test_api",
+      "name": "test_readiness_reports_dependency_failure[down-503]"
+    },
+    {
+      "module": "tests.test_api",
+      "name": "test_unexpected_exception_does_not_expose_details"
+    },
+    {
+      "module": "tests.test_api",
+      "name": "test_openapi_describes_health_endpoints"
+    },
+    {
+      "module": "tests.test_events",
+      "name": "test_reject_invalid_contract[event_id-None]"
+    },
+    {
+      "module": "tests.test_events",
+      "name": "test_reject_invalid_contract[event_id-bad-uuid]"
+    },
+    {
+      "module": "tests.test_events",
+      "name": "test_reject_invalid_contract[customer_id-]"
+    },
+    {
+      "module": "tests.test_events",
+      "name": "test_reject_invalid_contract[customer_id-None]"
+    },
+    {
+      "module": "tests.test_events",
+      "name": "test_reject_invalid_contract[order_id-None]"
+    },
+    {
+      "module": "tests.test_events",
+      "name": "test_reject_invalid_contract[product_id-None]"
+    },
+    {
+      "module": "tests.test_events",
+      "name": "test_reject_invalid_contract[amount--1.00]"
+    },
+    {
+      "module": "tests.test_events",
+      "name": "test_reject_invalid_contract[amount-1.001]"
+    },
+    {
+      "module": "tests.test_events",
+      "name": "test_reject_invalid_contract[amount-NaN]"
+    },
+    {
+      "module": "tests.test_events",
+      "name": "test_reject_invalid_contract[amount-None]"
+    },
+    {
+      "module": "tests.test_events",
+      "name": "test_reject_invalid_contract[event_type-unknown]"
+    },
+    {
+      "module": "tests.test_events",
+      "name": "test_reject_invalid_contract[schema_version-2]"
+    },
+    {
+      "module": "tests.test_events",
+      "name": "test_reject_invalid_contract[status-paid]"
+    },
+    {
+      "module": "tests.test_events",
+      "name": "test_reject_invalid_contract[region-unknown]"
+    },
+    {
+      "module": "tests.test_events",
+      "name": "test_reject_invalid_contract[currency-EUR]"
+    },
+    {
+      "module": "tests.test_events",
+      "name": "test_reject_invalid_contract[timestamp-2026-01-01T12:00:00]"
+    },
+    {
+      "module": "tests.test_events",
+      "name": "test_reject_invalid_contract[timestamp-1900-01-01T00:00:00Z]"
+    },
+    {
+      "module": "tests.test_events",
+      "name": "test_reject_invalid_contract[timestamp-2026-09-10T14:02:52.773177+00:00]"
+    },
+    {
+      "module": "tests.test_events",
+      "name": "test_reject_unknown_field"
+    },
+    {
+      "module": "tests.test_events",
+      "name": "test_serialization_preserves_money"
+    },
+    {
+      "module": "tests.test_events",
+      "name": "test_archived_validation_clock_is_explicit_and_does_not_change_default"
+    },
+    {
+      "module": "tests.test_events",
+      "name": "test_type_specific_requirements[payment_processed-payment_provider-None]"
+    },
+    {
+      "module": "tests.test_events",
+      "name": "test_type_specific_requirements[shipment_created-shipment_provider-None]"
+    },
+    {
+      "module": "tests.test_events",
+      "name": "test_type_specific_requirements[inventory_updated-metadata-value2]"
+    },
+    {
+      "module": "tests.test_events",
+      "name": "test_type_specific_requirements[inventory_updated-metadata-value3]"
+    },
+    {
+      "module": "tests.test_events",
+      "name": "test_type_specific_requirements[inventory_updated-metadata-value4]"
+    },
+    {
+      "module": "tests.test_generator",
+      "name": "test_seeded_generation_is_reproducible_and_covers_contract"
+    },
+    {
+      "module": "tests.test_generator",
+      "name": "test_journeys_preserve_identity_and_only_ship_paid_orders"
+    },
+    {
+      "module": "tests.test_generator",
+      "name": "test_payment_scenario_materially_increases_failure_rate"
+    },
+    {
+      "module": "tests.test_generator",
+      "name": "test_corruption_emits_duplicates_malformed_and_missing_ids"
+    },
+    {
+      "module": "tests.test_integration",
+      "name": "test_live_api_readiness"
+    },
+    {
+      "module": "tests.test_integration",
+      "name": "test_bootstrap_is_idempotent"
+    },
+    {
+      "module": "tests.test_integration",
+      "name": "test_postgres_transaction"
+    },
+    {
+      "module": "tests.test_integration",
+      "name": "test_s3_object_roundtrip"
+    },
+    {
+      "module": "tests.test_integration",
+      "name": "test_kafka_delivery_and_readback"
+    },
+    {
+      "module": "tests.test_producer",
+      "name": "test_finite_producer_confirms_each_record_and_closes"
+    },
+    {
+      "module": "tests.test_producer",
+      "name": "test_delivery_failure_is_not_silently_retried"
+    },
+    {
+      "module": "tests.test_producer",
+      "name": "test_startup_retries_broker_unavailable"
+    },
+    {
+      "module": "tests.test_producer",
+      "name": "test_startup_retries_are_bounded"
+    },
+    {
+      "module": "tests.test_producer",
+      "name": "test_shutdown_stops_before_next_record"
+    },
+    {
+      "module": "tests.test_producer_integration",
+      "name": "test_real_producer_cli_to_kafka_and_contract"
+    },
+    {
+      "module": "tests.test_stream_validation",
+      "name": "test_valid_record_normalizes_without_losing_money"
+    },
+    {
+      "module": "tests.test_stream_validation",
+      "name": "test_safe_rejection_codes[{broken-malformed_json]"
+    },
+    {
+      "module": "tests.test_stream_validation",
+      "name": "test_safe_rejection_codes[\\xff-malformed_json]"
+    },
+    {
+      "module": "tests.test_stream_validation",
+      "name": "test_safe_rejection_codes[None-other_validation]"
+    },
+    {
+      "module": "tests.test_stream_validation",
+      "name": "test_safe_rejection_codes[[]-other_validation]"
+    },
+    {
+      "module": "tests.test_stream_validation",
+      "name": "test_safe_rejection_codes[{}-missing_event_id]"
+    },
+    {
+      "module": "tests.test_stream_validation",
+      "name": "test_safe_rejection_codes[{\"metadata\":{\"bad\":NaN}}-malformed_json]"
+    },
+    {
+      "module": "tests.test_stream_validation",
+      "name": "test_safe_rejection_codes[{\"event_id\":\"some-id\",\"event_type\":\"bad\"}-invalid_event_type]"
+    },
+    {
+      "module": "tests.test_stream_validation",
+      "name": "test_safe_rejection_codes[{\"event_id\":\"some-id\",\"event_type\":[]}-invalid_event_type]"
+    },
+    {
+      "module": "tests.test_stream_validation",
+      "name": "test_contract_failure_classification[schema_version-99-schema_validation]"
+    },
+    {
+      "module": "tests.test_stream_validation",
+      "name": "test_contract_failure_classification[event_id-private-untrusted-value-schema_validation]"
+    },
+    {
+      "module": "tests.test_stream_validation",
+      "name": "test_contract_failure_classification[status-private-untrusted-value-invalid_business_fields]"
+    },
+    {
+      "module": "tests.test_stream_validation",
+      "name": "test_validation_uses_archived_clock_on_replay"
+    },
+    {
+      "module": "tests.test_stream_validation",
+      "name": "test_reject_unsafe_table_name[events; DROP TABLE events]"
+    },
+    {
+      "module": "tests.test_stream_validation",
+      "name": "test_reject_unsafe_table_name[stage_x]"
+    },
+    {
+      "module": "tests.test_stream_validation",
+      "name": "test_reject_unsafe_table_name[]"
+    },
+    {
+      "module": "tests.test_stream_validation",
+      "name": "test_reject_unsafe_table_name[public.stage_123]"
+    },
+    {
+      "module": "tests.test_stream_validation",
+      "name": "test_staging_identity_is_stable_and_generation_specific"
+    },
+    {
+      "module": "tests.test_streaming_integration",
+      "name": "test_actual_producer_reaches_raw_cleaned_curated_and_warehouse"
+    },
+    {
+      "module": "tests.test_streaming_integration",
+      "name": "test_duplicates_preserve_both_sources_but_one_logical_event"
+    },
+    {
+      "module": "tests.test_streaming_integration",
+      "name": "test_invalid_input_preserved_and_delivered_to_dlq"
+    },
+    {
+      "module": "tests.test_streaming_integration",
+      "name": "test_minute_aggregates_equal_unique_event_time_totals"
+    },
+    {
+      "module": "tests.test_streaming_integration",
+      "name": "test_watermark_excludes_late_event_but_retains_raw_and_reports_drop"
+    },
+    {
+      "module": "tests.test_streaming_integration",
+      "name": "test_checkpoint_restart_retains_identity_and_dedup_state"
+    },
+    {
+      "module": "tests.test_streaming_integration",
+      "name": "test_postgres_outage_fails_stream_and_recovers_uncommitted_input"
+    },
+    {
+      "module": "tests.test_warehouse_integration",
+      "name": "test_schema_and_transactional_sink_replay"
+    }
+  ]
+}

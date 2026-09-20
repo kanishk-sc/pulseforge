@@ -40,8 +40,8 @@ redaction, request IDs, producer failure paths, bounded retries and graceful sto
 - The current test dependencies emit two upstream deprecation warnings from Starlette's
   TestClient (httpx compatibility and an AnyIO alias). Tests pass; warnings are not hidden.
 - GitHub Actions is configured, but a local run is not evidence of a completed hosted CI run.
-- At the time of this Phase 1 report, Spark, dbt, Airflow, React, Redis, metrics and AI
-  execution were not claimed. Later sections record the subsequently executed phases.
+- Phase 1 did not exercise Spark, dbt, Airflow, React, Redis, metrics servers, anomaly
+  detection or AI. The Phase 2 section below records subsequent streaming evidence.
 - No performance or AI evaluation results exist. A 100-event smoke run is not a benchmark.
 - Local credentials are generated in `.env` and excluded from Git and the Docker context.
 
@@ -62,86 +62,322 @@ For an outage drill, `docker compose stop postgres`, inspect `/health` and `/rea
 then `docker compose start postgres` and confirm `/ready` returns 200 again.
 Do not delete volumes to test a transient outage.
 
-## Phase 2 streaming verification
+# Phase 2 verification
 
-Executed on **2026-09-18** on Windows with Docker Desktop's Linux engine, Spark 3.5.9,
-Python 3.12.13 and an isolated Kafka/PostgreSQL/MinIO stack. This is a correctness
-smoke test, not a throughput benchmark.
+Execution date: **2026-09-09**. Windows host, Python 3.12.13, Docker Desktop Linux
+engine 29.5.2. Spark uses a 1 GB driver heap, two local execution threads and a 3 GB
+container limit. These are configuration values, not benchmark results.
 
-| Check | Observed result |
+## Verification scope
+
+The phase is checked against both existing development data and a fresh Compose
+project named `pulseforge-phase2-verification`, with new Kafka/PostgreSQL/MinIO
+volumes. Original development volumes are preserved. The full command is:
+
+```sh
+docker compose --profile streaming up -d --build --wait --wait-timeout 240
+uv run pytest --run-integration --run-streaming --junitxml=local-results.xml
+```
+
+The default non-streaming integration command remains available for the foundation.
+CI now builds the streaming image and runs all integration tests, including controlled
+restarts and PostgreSQL outage/recovery, without secrets or paid services.
+
+## Hosted CI result
+
+[Platform CI run 34361432528](https://github.com/kanishk-sc/pulseforge/actions/runs/34361432528)
+completed successfully on implementation/test commit `aac0fee`:
+
+- `python`: formatting, lint, schema export validation and **59 tests passed**.
+- `compose-integration`: fresh Docker builds, healthy Spark stack and **14 integration
+  tests passed**, including all seven streaming acceptance tests. Job logs confirm
+  zero test failures; the other 59 cases were deliberately deselected in this job.
+
+Milestone commits: `54e7049` (foundation cleanup and real producer coverage),
+`1a85b53` (streaming implementation), `aac0fee` (acceptance tests and CI).
+The concluding documentation commit changes no executable code.
+
+## Executed local results
+
+| Check | Actual result |
 | --- | --- |
-| Formatting and lint | Ruff format check and lint passed |
-| Spark transformations | 7 Spark tests passed, including non-UTF-8 raw-byte preservation |
-| Full non-infrastructure suite | 47 tests passed; 6 infrastructure tests deselected |
-| Container build | Pinned Spark image and Kafka/PostgreSQL/S3 connector resolution succeeded |
-| Initial bounded stream | 200 Kafka inputs produced 179 unique accepted rows and 15 dead-letter records |
-| Event sink integrity | 179 rows, 179 distinct IDs, zero persisted duplicates |
-| Minute metrics | 179 events, 39 payment attempts, 22 failures and USD 4,683.30 successful revenue |
-| Lake output | Raw and cleaned Parquet objects were written to isolated MinIO storage |
-| Automated all-sink path | Opt-in integration test delivered a valid event to PostgreSQL/cleaned MinIO and an invalid event to raw MinIO/dead-letter Kafka |
-| Deterministic replay | Replayed the same 200 IDs; event and metric counts remained unchanged; raw evidence and DLQ records increased |
-| Checkpoint restart | Forced a Spark container recreation; five queries resumed without errors and counts remained unchanged |
+| Ruff formatting | 40 files already formatted |
+| Ruff lint | All checks passed |
+| Exported v1 JSON Schema | Matches shared Pydantic model |
+| Non-integration suite | 59 passed; 14 integration tests deselected |
+| Full fresh-volume suite | **73 passed, 0 failed, 0 errors, 0 skipped**, two upstream deprecation warnings |
+| Compose build/start | Spark, API, Kafka, PostgreSQL and MinIO healthy; bootstrap exit 0 |
+| Actual producer → Kafka → Spark | CLI-generated IDs validated by a real consumer and found in committed cleaned/curated data and PostgreSQL |
+| Raw and DLQ | Malformed bytes retained byte-for-byte; malformed and missing-ID reasons reach DLQ; no invalid source tuple in warehouse |
+| Duplicate event | Both Kafka offsets in raw, one cleaned record and one warehouse row |
+| Minute aggregates | Event-type counts and decimal sums match independent SQL aggregation of unique event-time rows |
+| Late event | Old record retained in raw, excluded from live warehouse, explicit watermark-drop diagnostic observed |
+| Restart | All three checkpoint UUIDs retained; new event processed; replayed duplicate remains unique |
+| PostgreSQL outage | Spark exits; failed batch has offsets but no checkpoint commit or DB ledger row; event absent until recovery |
+| Recovery | Restart resumes the same checkpoint and commits the pending event once |
+| Database replay | Repeating the same batch and the same input under another batch does not inflate rows or minute totals |
 
-The failure/recovery path also exposed a real warehouse defect: staging represented UUID
-and JSON values as text, while the final table required `uuid` and `jsonb`. The merge now
-casts those values explicitly. Restarting from the unchanged checkpoint retried the batch,
-loaded all 179 valid events and left no duplicate event IDs.
+[Machine-readable results](phase-2-test-results.json) were extracted from the actual
+JUnit XML, retaining all 73 case names and outcome counts. The temporary verification
+containers were removed without deleting their volumes. The original development
+stack was restored and all five long-running services returned healthy.
 
-Current limits: the all-sink delivery path is automated, but deliberate sink outages
-and restart recovery remain manual smoke procedures; rejected records are intentionally replayable and therefore at-least-once in the
-dead-letter topic; the single local Spark driver is not a production cluster; curated
-business models and compaction belong to Phase 3. Hosted GitHub Actions status is not
-claimed because this verification ran locally.
+## Failures found during implementation
 
-## Phase 3 dbt verification
+- A freshly created partitioned raw source initially had a schema mismatch when its
+  first `ingest_date` partition appeared. Adding the explicit partition field fixed
+  the source schema, and the fresh-volume startup exercises that path.
+- Polling `lastProgress` could miss a stateful batch when Spark immediately committed
+  an empty follow-up batch. A `StreamingQueryListener` now logs every progress event;
+  the late-event test requires the explicit `watermark_dropped=1` diagnostic.
+- Host PostgreSQL connections through `localhost` encountered Windows IPv6 fallback
+  delays. Streaming's host default now matches Compose's IPv4 loopback binding.
+- The actual-producer fixture initially assumed async metadata lookup and omitted
+  random draws made by `next_record`. It now subscribes before inspecting partitions,
+  captures end offsets, and derives expected IDs through the same public generator path.
+- Array-valued event types and non-finite JSON numbers now produce safe validation
+  failures rather than unexpected exceptions in executor code.
 
-Executed on **2026-09-18** against the same populated isolated PostgreSQL warehouse.
-dbt Core 1.12.5 with dbt-postgres 1.11.0 built 14 models and ran 43 data tests.
-The result was **55 pass, 2 warnings, 0 errors, 0 skips** across 57 operations.
+## Limits
 
-The warnings are evidence rather than ignored failures: deliberate upstream corruption
-left five payment attempts and three shipment events without their order-created event.
-Relationship tests report those rows at warning severity, while
-`mart_data_quality_hourly` persists their counts by hour and region. The modeled revenue
-reconciled to the stream aggregate at USD 4,683.30 across 17 successful payments.
+- This is at-least-once multi-sink execution with idempotent effects, not a distributed
+  exactly-once transaction. DLQ messages can repeat with the same source key.
+- Very late events remain in raw and are reported by the watermark diagnostic, but
+  can be absent from live cleaned/warehouse output. Offline reconciliation is future work.
+- Cleaned/curated readers must honor commit manifests. The inspection CLI does so,
+  but loads the small demo dataset into host memory.
+- One active warehouse writer, single-node Kafka and local Spark are deliberate limits.
+  File compaction and abandoned-generation staging cleanup are not automated.
+- JVM warnings about native Hadoop libraries and object-store sync APIs are visible;
+  they are not proof of HDFS-style atomic rename semantics on object storage.
+- The two pre-existing Starlette/AnyIO deprecation warnings remain visible in Python tests.
+- No throughput, latency-percentile or scalability benchmark was run or claimed.
 
-## Phase 3 Airflow verification
+# Phase 3 verification
 
-Executed on **2026-09-18** against the populated isolated stack with Apache Airflow
-3.3.2 and dbt Core 1.12.5. The custom Airflow image built successfully and `pip check`
-reported no broken requirements. Database migration and DAG reserialization succeeded;
-`airflow dags list-import-errors --output json` returned an empty list and all three
-DAGs were registered.
+Execution date: **2026-09-09**. Windows host, Python 3.12.13, uv 0.11.16,
+Docker Desktop Linux engine 29.5.2, PostgreSQL 16.9, dbt Core 1.12.2,
+dbt-postgres 1.11.0 and Apache Airflow 3.3.0. This is functional correctness
+evidence, not a performance benchmark.
 
-| DAG | Observed execution result |
+## Verification scope
+
+Phase 3 was exercised against the live Phase 2 warehouse and in a UUID-named,
+disposable database created inside the real PostgreSQL service. The deterministic
+fixture initialized the exact Phase 2 schema, committed 12 accepted events through
+the existing transactional sink, attempted an event-ID replay, ran dbt twice and
+dropped the database afterward.
+
+The full regression command ran every foundation, streaming and analytics case while
+the streaming service was healthy:
+
+```sh
+docker compose --profile streaming up -d --build --wait --wait-timeout 240
+uv run pytest --run-integration --run-streaming --run-analytics --basetemp=.pytest_cache/full-tmp --junitxml=phase-3-results.xml
+```
+
+## Executed local results
+
+| Check | Actual result |
 | --- | --- |
-| `pulseforge_analytics_pipeline` | Four tasks succeeded: source freshness, staging/dimension/fact build, mart build and 43 dbt tests (41 pass, 2 expected warnings) |
-| `pulseforge_data_quality_report` | Two tasks succeeded and wrote `artifacts/quality/20260918T202124Z.json` from dbt's real run-results artifact (41 pass, 2 warnings, no failures) |
-| `pulseforge_lake_retention` | Task succeeded in the default dry-run mode with 0 expired candidates and 0 deletions |
+| Ruff format/check | 46 Python files already formatted; all lint checks passed |
+| Non-integration regression | 62 passed, 17 integration tests deselected |
+| dbt parse and compile | Both exited 0 against the configured PostgreSQL warehouse |
+| dbt build | 14 models and 93 data tests; **PASS=108, WARN=0, ERROR=0, SKIP=0, TOTAL=108** |
+| Explicit dbt test | 93 data tests plus the project hook; **PASS=94, WARN=0, ERROR=0, SKIP=0, TOTAL=94** |
+| Analytics acceptance | 3 passed in a disposable real database; exact dimension, fact, mart, lineage, replay and rerun assertions passed |
+| Full local regression | **79 passed, 0 failed, 0 errors, 0 skipped** in 217.93 seconds; two known upstream deprecation warnings |
+| Default Compose compatibility | `docker compose up -d --build --wait --wait-timeout 180` exited 0; API, Kafka, PostgreSQL and MinIO healthy; bootstrap exited 0 |
+| Airflow DAG import | Zero import errors; exactly `verify_warehouse`, `dbt_build`, `quality_summary` with the required linear dependencies |
+| Airflow service | Standalone service healthy; metadata database, scheduler, triggerer and DAG processor health checks healthy |
+| Real Airflow run | `airflow dags test pulseforge_analytics 2026-09-09T18:00:00+00:00` exited 0; all three tasks and the DAG run succeeded |
+| Airflow-run quality summary | `result_count=108`, statuses `pass=93` and `success=15`, failed count 0 |
+| Failure-domain separation | The streaming and Airflow containers were concurrently healthy after the DAG; 185 Phase 2 source events and existing analytics relations remained queryable |
 
-The DAG runs used actual PostgreSQL and MinIO services. The retention result proves the
-safe no-delete default and execution path; it is not evidence that deletion of expired
-objects has been exercised. Airflow standalone uses SQLite locally and is not presented
-as a highly available production deployment.
+The deterministic expected values included four orders, four payment attempts, two
+created shipments, one refund request, four customers, four products and four regions.
+Successful-payment revenue totaled USD 380.00. The 10:00 east payment cohort contained
+two attempts and one failure for a 0.5 failure rate. One shipment was attributed exactly
+one delay; the other was not delayed. Repeating the source UUID committed zero new source
+rows, and the second dbt build retained stable source, fact and revenue totals.
 
-## Product, observability and deployment-target verification
+Milestone implementation commits are `9f658ea` (dbt models), `9c26881` (Airflow
+orchestration) and `d0bbe71` (acceptance tests and CI). The concluding documentation
+commit changes no executable code.
 
-Executed on **2026-09-18/19** against the populated isolated stack. The warehouse
-contained the same 17 successful payments and USD 4,683.30 revenue reconciled above.
+## Failure behavior verified by construction and execution
 
-| Check | Observed result |
+- PostgreSQL availability is checked before transformation. `dbt debug` and `dbt build`
+  return nonzero on connection failure; Airflow retries twice with a one-minute delay,
+  then leaves the DAG failed and visible.
+- A model error or dbt data-test failure makes `dbt_build` fail. Airflow's default
+  all-success dependency prevents the summary task from masking that failure.
+- The quality-summary program fails closed when results are missing, malformed or
+  contain failure/error statuses; unit tests cover successful and failed result sets.
+- Facts merge by source event UUID and dbt never writes the Phase 2 `public` sources.
+  The populated integration test's replay and second build prove stable row counts.
+- The DAG contains no Spark, streaming or checkpoint operation. The real DAG completed
+  while Spark continued from its existing checkpoint, demonstrating independent local
+  operation rather than scheduler control of the stream.
+
+## Failures found during implementation
+
+- dbt 1.12 rejects global project/profile arguments placed before the subcommand. The
+  container now supplies the profiles directory through its environment and invokes
+  subcommands in the analytics working directory.
+- A read-only analytics bind prevented dbt from writing generated target artifacts.
+  The project bind is writable while generated target/log/package paths remain ignored.
+- Airflow 3.3's public `DagBag` location and constructor differ from older examples.
+  The verifier now uses the current public import and constructor and executes inside
+  the pinned image.
+- Airflow could not initialize a root-owned named volume as its non-root runtime user.
+  The image now creates and owns its state directory before dropping privileges.
+- Windows denied access to pytest's default temporary directory after Docker-mounted
+  integration work. The successful local reruns supplied the documented workspace-local,
+  ignored `--basetemp`; no assertion or service behavior was changed.
+
+## Hosted CI status and limits
+
+- The workflow now has a separate `analytics-integration` job that builds both images,
+  compiles dbt, imports the real DAG and runs the deterministic PostgreSQL acceptance
+  test. It preserves the prior Python and streaming jobs.
+- No hosted Phase 3 run is claimed yet. Local workflow inspection and execution are not
+  evidence that GitHub Actions completed the new commit.
+- dbt deliberately rescans relevant accepted events for correct replay and late-arrival
+  behavior at this scale. A measured high-volume workload may justify a source-change
+  strategy later, but must preserve those semantics.
+- The streaming watermark can exclude a very late event before it reaches PostgreSQL.
+  dbt cannot recover that raw-only evidence; offline reconciliation remains future work.
+- Local dbt and Phase 2 services share one generated PostgreSQL development role.
+  Separate least-privilege source-reader and schema-owner roles are required before
+  production exposure.
+- Airflow's local SQLite metadata and simple auth are development choices. The generated
+  password has no checked-in default, and port 8080 binds to loopback only.
+- No dashboard, anomaly detector, incident API, telemetry system, AI assistant, cloud
+  resource, throughput benchmark or scalability claim is part of Phase 3.
+
+## Reproduce Phase 3
+
+```sh
+uv sync --frozen
+uv run python scripts/init_env.py
+uv run ruff format --check .
+uv run ruff check .
+uv run pytest -m "not integration" --basetemp=.pytest_cache/unit-tmp
+docker compose up -d --build --wait --wait-timeout 180
+docker compose --profile analytics build analytics-dbt
+docker compose --profile analytics run --rm analytics-dbt compile
+docker compose --profile analytics run --rm analytics-dbt build
+docker compose --profile airflow build airflow
+docker compose --profile airflow run --rm --no-deps airflow python /opt/pulseforge/scripts/verify_airflow_dag.py
+uv run pytest -m analytics --run-integration --run-analytics --basetemp=.pytest_cache/analytics-tmp
+```
+
+For the full Phase 2 plus Phase 3 regression, start the streaming profile and use the
+full regression command above. The tests intentionally stop and restart local services;
+run them only against a development stack without an independent producer.
+
+
+# Phase 3 review and re-verification — 2026-09-16
+
+The existing Phase 3 implementation was reviewed on `phase-3-analytics`, then hardened
+without changing the Phase 1 event contract or Phase 2 ingestion/checkpoint code.
+The full regression below exercised implementation commit `e53eb5c`. The subsequent
+registry-only fix `5d0d3a6` uses the identical MinIO image and passed a fresh foundation
+verification. Historical September 9 results above remain historical evidence.
+
+## Corrections and scope
+
+- Materialize the event staging table once per full build. Dimensions and facts now
+  share a committed source snapshot while Spark continues ingesting.
+- Pass UTC explicitly to all hourly date_trunc expressions, including against a
+  database configured for Asia/Kathmandu. The run-start hook alone did not establish
+  a timezone on every worker connection.
+- Return zero requests per order when there are orders but no requests; retain null
+  when there is no order denominator.
+- Reject multiple shipment creations for one order in a business-rule test, since
+  contract v1 has no independent shipment identifier for unambiguous delay attribution.
+- Fail the quality summary on empty, malformed, skipped, warning or unknown results.
+- Mount the CLI dbt project read-only and write generated artifacts under /tmp in the
+  container, removing the requirement to write to a Linux runner-owned checkout.
+- Correct the minute metric grain (minute/event type, no region) and region spelling
+  in the design documentation. Document partial model publication and serial builds.
+
+## Exact executed commands and observed results
+
+Commands ran in PowerShell. Output redirection to ignored diagnostic logs is omitted.
+
+| Command | Observed result |
 | --- | --- |
-| Python quality | Ruff format/check and schema export passed; 50 non-integration tests passed, 6 live tests deselected |
-| Frontend quality | npm audit reported 0 vulnerabilities; TypeScript check and Vite production build passed |
-| Analytics API | Overview returned actual revenue/payment/shipment/refund/operations/quality marts; repeated request reported a Redis cache hit |
-| Cache outage | With Redis stopped and an uncached time window, overview still returned HTTP 200 from PostgreSQL; Redis was restarted |
-| Dashboard | Production Nginx image served the React bundle and proxied `/api/metrics/overview` to the real API |
-| Metrics | Prometheus health passed and `up{job="pulseforge-api"}` returned 1 after a real scrape |
-| Grafana | Provisioned container health returned database `ok` on Grafana 12.1.1 |
-| Compose | All profiles parsed successfully; isolated API, dashboard, Redis, Prometheus and Grafana started |
-| Terraform | Terraform 1.13.5 initialized AWS/random providers and `terraform validate` returned success |
+| `uv run ruff format --check .` | 46 files already formatted |
+| `uv run ruff check .` | All checks passed |
+| `uv run python scripts/export_schema.py --check` | Version 1 schema matches Pydantic |
+| `uv run pytest -m "not integration" --basetemp=.pytest_cache/unit-tmp` | 68 passed; 18 integration cases deselected |
+| `docker compose --profile analytics build analytics-dbt` | Exit 0 |
+| `docker compose --profile analytics run --rm analytics-dbt parse` | Exit 0 |
+| `docker compose --profile analytics run --rm analytics-dbt compile` | Exit 0 |
+| `docker compose --profile analytics run --rm analytics-dbt build` | 14 models, 94 data tests, one hook: PASS=109, WARN=0, ERROR=0, SKIP=0 |
+| `docker compose --profile analytics run --rm analytics-dbt test` | 94 tests and one hook: PASS=95, WARN=0, ERROR=0, SKIP=0 |
+| `uv run pytest -m analytics --run-integration --run-analytics --basetemp=.pytest_cache/analytics-tmp` | 4 passed in 45.81 seconds; subsequent full run also covered the added zero-denominator fixture |
+| `docker compose --profile streaming up -d --build --wait --wait-timeout 240` | Exit 0; healthy streaming stack |
+| `uv run pytest --run-integration --run-streaming --run-analytics --basetemp=.pytest_cache/full-tmp --junitxml=phase3-review-results.xml` | **86 passed, 0 failures, 0 errors, 0 skipped**, 235.17 seconds; two existing upstream warnings |
+| `docker compose --profile airflow build airflow` | Exit 0 |
+| `docker compose --profile airflow run --rm --no-deps airflow python /opt/pulseforge/scripts/verify_airflow_dag.py` | Zero import errors; expected three-task linear DAG |
+| `docker compose --profile airflow up -d --build --wait --wait-timeout 180 airflow` | Exit 0; healthy service |
+| `docker compose exec airflow airflow dags test pulseforge_analytics 2026-09-16T15:00:00+00:00` | Exit 0; all three tasks and DAG successful; summary reports 94 pass, 15 success, zero failed |
+| `docker compose --profile analytics run --rm --no-deps -e POSTGRES_PORT=1 analytics-dbt debug` | Expected nonzero exit on unavailable PostgreSQL endpoint; no service stopped |
+| `docker compose config --quiet` | Exit 0 |
+| `docker compose up -d --build --wait --wait-timeout 180` | Exit 0, including after the registry correction |
+| `uv run pytest tests/test_integration.py --run-integration --basetemp=.pytest_cache/quay-tmp` | 5 passed in 26.32 seconds after registry correction |
+| `git diff --check` | No whitespace errors |
 
-The frontend build reports a 577.35 kB minified JavaScript chunk (172.38 kB gzip), so
-route/chart code splitting is worthwhile future work; no Core Web Vitals or load claim
-is inferred from a successful build. Terraform validation is syntax/provider-schema
-evidence only. No AWS plan or apply ran, and no public deployment is claimed.
+[Machine-readable case results](phase-3-test-results.json) are extracted from the
+actual full-run JUnit XML. The 86 cases comprise 68 non-integration tests, four analytics
+acceptance tests and the existing 14 foundation/streaming integration tests.
+
+The deterministic analytics fixture starts with 12 events and exact revenue USD 380,
+two east payment attempts with one failure (rate 0.5), and two created shipments.
+Replaying a UUID inserts zero events. An interleaved subsequent ingestion adds a late
+order, a later shipment delay and a refund request in a region/hour without orders.
+Downstream work using the already-captured staging table still sees four orders;
+a full rebuild sees five, updates the existing shipment delay, keeps revenue at USD
+380 and yields null for the request/order ratio without orders. A deliberately
+corrupted analytics payment status makes the actual dbt test fail; a full rebuild
+repairs it while the source retains exactly 15 events. All four contract regions are
+represented after the late arrivals. The temporary test database is dropped afterward.
+
+## Registry failure discovered by hosted CI
+
+The first hosted run on `e53eb5c` failed before starting streaming tests because Docker
+Hub denied access to `minio/minio`. The same pinned release is available through
+[MinIO's documented Quay registry](https://github.com/minio/minio/blob/master/docs/docker/README.md).
+The correction changes only the registry reference to
+`quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z`. Locally, inspecting both tags returned
+the identical image ID `sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e`.
+No volumes, ports, settings, checkpoints or storage semantics changed.
+
+[Hosted run 35117743583](https://github.com/kanishk-sc/pulseforge/actions/runs/35117743583)
+completed successfully on `5d0d3a6`:
+
+- Python: formatting, lint, schema verification and **68 passed** (3.02 seconds).
+- Analytics: fresh image builds, dbt compilation, real DAG import and **4 passed**
+  against populated PostgreSQL (52.08 seconds).
+- Foundation/streaming: fresh stack startup and **14 passed** (92.53 seconds).
+  The four analytics cases were intentionally skipped here and passed in their
+  dedicated job; the 68 non-integration cases were deselected.
+
+Implementation commits already present at review start were `9f658ea` (dbt),
+`9c26881` (Airflow), `d0bbe71` (tests/CI), and `0b8c226` (initial verification docs).
+Review corrections are `6a9aeed` (snapshot/metrics/acceptance), `e53eb5c` (quality
+summary), and `5d0d3a6` (registry). The concluding documentation commit does not
+change executable code. No merge to main was performed.
+
+## Remaining operational limits
+
+Models publish independently; a failing test does not atomically roll back the entire
+analytics schema. Use successful build results and serialize manual builds with Airflow
+for each target schema. Late events excluded by Spark's watermark remain raw-only and
+cannot be recovered by dbt. Shipment cohort attribution requires one creation per order;
+unmatched delays remain source evidence. Full source rescans, local SQLite Airflow
+metadata, the shared development PostgreSQL role and single-node services remain
+intentional development limits. No performance benchmark or Phase 4 feature is claimed.
