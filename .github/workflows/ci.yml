@@ -26,6 +26,8 @@ jobs:
         working-directory: frontend
       - run: npm audit --audit-level=high
         working-directory: frontend
+      - run: npm test -- --run
+        working-directory: frontend
       - run: npm run typecheck
         working-directory: frontend
       - run: npm run build
@@ -73,3 +75,46 @@ jobs:
         run: docker compose --profile analytics --profile airflow logs --no-color --tail 100
       - if: always()
         run: docker compose --profile analytics --profile airflow down
+  product-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v8.0.0
+        with:
+          version: "0.11.16"
+          python-version: "3.12"
+      - run: uv sync --frozen
+      - run: uv run python scripts/init_env.py
+      - run: docker compose config --quiet
+      - run: docker compose up -d --wait --wait-timeout 120 postgres
+      - run: docker compose --profile product run --rm --build product-migrate
+      - name: Seed deterministic anomaly
+        id: seed
+        shell: bash
+        run: |
+          seed_json=$(uv run python scripts/seed_product_acceptance.py)
+          echo "$seed_json"
+          detector_now=$(python -c 'import json,sys; print(json.load(sys.stdin)["detector_now"])' <<< "$seed_json")
+          echo "detector_now=$detector_now" >> "$GITHUB_OUTPUT"
+      - run: docker compose --profile airflow build airflow
+      - name: Build, publish, and detect
+        run: >-
+          docker compose --profile airflow run --rm --no-deps airflow
+          python -m pulseforge.product.cli pipeline
+          --build-key "ci-${{ github.run_id }}-${{ github.run_attempt }}"
+          --project-dir /opt/pulseforge/analytics
+          --profiles-dir /opt/pulseforge/analytics
+          --detector-now "${{ steps.seed.outputs.detector_now }}"
+      - run: docker compose --profile product up -d --build --wait --wait-timeout 180 redis api dashboard
+      - name: Verify PostgreSQL to API incident flow
+        shell: bash
+        run: |
+          set -a
+          source .env
+          set +a
+          uv run pytest -vv tests/test_product_integration.py --run-integration --run-product --junitxml=product-results.xml
+      - if: failure()
+        run: docker compose --profile product --profile airflow logs --no-color --tail 150
+      - if: always()
+        run: docker compose --profile product --profile airflow down
