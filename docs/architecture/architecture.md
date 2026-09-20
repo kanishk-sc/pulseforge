@@ -6,7 +6,9 @@ PulseForge uses entirely synthetic commerce/logistics data. Phase 1 establishes 
 working ingestion boundary. Phase 2 adds the [streaming implementation](phase-2-design.md),
 including sink, checkpoint, watermark and recovery semantics. Phase 3 adds the
 [analytics implementation](phase-3-design.md), including exact model grains, metric
-denominators, idempotent rebuilds and finite orchestration. The seven-phase
+denominators, idempotent rebuilds and finite orchestration. Phase 4 adds the
+[product boundary](phase-4-design.md): atomic publications, versioned APIs,
+deterministic incidents and an evidence UI. The seven-phase
 [plan](implementation-plan.md) distinguishes implemented code from future architecture.
 The design prioritizes reproducibility, explicit failure behavior and useful tests.
 
@@ -105,7 +107,7 @@ those semantics, use UTC event-time hours and retain null when no denominator ex
 The combined health mart is a feature table, not anomaly detection. See the
 [Phase 3 design](phase-3-design.md) for the full model table and late-arrival behavior.
 
-## API, caching and failures
+## API, publication, caching and failures
 
 Phase 1 has two typed health endpoints. `/health` is process liveness; `/ready` concurrently
 checks PostgreSQL, Kafka topic existence and the bucket. It returns 503 when any check
@@ -114,13 +116,18 @@ owns a bounded async connection pool with pre-ping and lifespan cleanup. boto3 p
 run in threads because its client is synchronous. Exception types, not credentials or
 raw connection strings, appear in application error logs.
 
-The API is local-only and read-only today. `/api/metrics/overview` queries the tested
-dbt marts and caches each bounded time window in Redis; `/api/pipeline/status` reports
-warehouse freshness. Cache entries expire after a configurable TTL. Redis failures
-degrade to direct warehouse reads and are counted rather than breaking the endpoint.
-Authentication, authorization, TLS, rate
-limits and least-privilege service credentials are required before external exposure.
-Redis never stores authoritative incidents or health state.
+The API is local-only and read-only. Phase 4 never serves mutable dbt relations
+directly. After every successful `dbt build`, one repeatable-read transaction copies
+all marts into build-tagged product tables and marks that build published. Running or
+failed builds cannot replace the previous success. `/api/v1` metrics use bounded UTC
+intervals and identify their exact build; status endpoints distinguish fresh, stale,
+failed and unavailable states without inferring Spark health from event timestamps.
+
+Cache entries expire after a configurable TTL and include the publication ID in their
+identity. Redis failures degrade to direct warehouse reads rather than breaking the
+endpoint. Decimal values remain strings across the API boundary. Authentication,
+authorization, TLS, rate limits and least-privilege service credentials are required
+before external exposure. Redis never stores authoritative incidents or health state.
 
 ## Observability and explainable incidents
 
@@ -131,9 +138,11 @@ OpenTelemetry-instrumented and exports OTLP/HTTP only when configured. Kafka inp
 consumer lag and Spark batch telemetry remain future work. Metrics never use event or
 customer IDs as labels because those create unbounded cardinality.
 
-Detectors will require minimum sample sizes, trailing historical baselines and cooldowns.
-Incidents persist observed values, baselines, affected segments and source evidence.
-An order-volume drop needs a time-driven check even when no new events arrive.
+Detectors use explicit minimum sample sizes, trailing historical baselines, current-
+window exclusion and a six-hour cooldown. Incidents persist observed values, baselines,
+thresholds, build identity and source evidence transactionally. Stale publications are
+not classified. Payment failures, shipment delays, refund spikes and order-volume drops
+are deterministic versioned rules, and a finite time-driven check can detect absence.
 The AI assistant will retrieve this evidence and runbooks; it must not invent a cause
 from correlation or act as the primary detector. Answers will distinguish observation,
 hypothesis and recommended investigation. Offline mode remains a labeled evidence

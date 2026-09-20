@@ -37,16 +37,22 @@ Re-verified on 2026-09-16: 68 non-integration tests, four deterministic analytic
 tests, 109 successful dbt build results, a successful real Airflow DAG run and 86
 full local tests including every Phase 2 streaming recovery case. Hosted CI passed
 all three jobs after correcting the MinIO registry reference. See [design](phase-3-design.md) and
-[evidence](../verification.md). Phase 4 and later remain unimplemented.
+[evidence](../verification.md).
 
-## 4. Product layer
+## 4. Product layer (complete)
 - [x] Typed metrics, pipeline and quality APIs backed by dbt marts
 - [x] Redis cache with bounded TTL and graceful cache failure
-- [ ] Persisted incident API
-- [ ] Explainable anomaly detectors with minimum samples and baseline evidence
+- [x] Atomic successful-build publication and explicit stale/failed/running states
+- [x] Persisted incident API
+- [x] Explainable anomaly detectors with minimum samples and baseline evidence
 - [x] React/TypeScript dashboard, polling, typed data, and loading/empty/error states
-- [ ] Critical component and browser UI tests
-- [ ] End-to-end anomaly → persisted incident → dashboard demonstration
+- [x] Critical component and real browser UI tests
+- [x] End-to-end anomaly → persisted incident → dashboard demonstration
+
+Verified on 2026-09-20 with a 140-event deterministic fixture, 109 successful dbt
+results, an immutable product publication, one evidence-backed critical incident,
+live PostgreSQL/API assertions and an actual browser flow. See
+[design](phase-4-design.md) and [evidence](../verification.md).
 
 ## 5. Observability and reliability
 - [x] Prometheus API metrics, provisioned Grafana dashboard and optional FastAPI OpenTelemetry export
