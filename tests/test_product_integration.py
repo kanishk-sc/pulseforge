@@ -1,4 +1,3 @@
-import os
 from datetime import timedelta
 from uuid import uuid4
 
@@ -8,17 +7,19 @@ import pytest
 from psycopg.rows import dict_row
 
 from pulseforge.product.publication import begin_build, fail_build
+from pulseforge.streaming.config import StreamSettings
 
 pytestmark = [pytest.mark.integration, pytest.mark.product]
 
 
 def connect():
+    settings = StreamSettings()
     return psycopg.connect(
-        host=os.getenv("POSTGRES_HOST", "127.0.0.1"),
-        port=os.getenv("POSTGRES_PORT", "5432"),
-        dbname=os.getenv("POSTGRES_DB", "pulseforge"),
-        user=os.getenv("POSTGRES_USER", "pulseforge"),
-        password=os.environ["POSTGRES_PASSWORD"],
+        host=settings.postgres_host,
+        port=settings.postgres_port,
+        dbname=settings.postgres_db,
+        user=settings.postgres_user,
+        password=settings.postgres_password.get_secret_value(),
         connect_timeout=5,
         row_factory=dict_row,
     )

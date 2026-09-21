@@ -456,6 +456,10 @@ earlier failed build without claiming Spark liveness.
   retained passing tests and reduced `npm audit` to zero vulnerabilities.
 - Host PostgreSQL access through `localhost` stalled on this Windows configuration;
   product integration defaults now use `127.0.0.1` and a five-second connect timeout.
+- The first Phase 4 hosted product job sourced `.env` in Bash; the valid unquoted value
+  `10 minutes` was interpreted as a command. The application pipeline had already
+  succeeded. The test now loads the project's typed settings directly, avoiding shell
+  parsing of environment files; the exact local integration rerun passed 3/3.
 - The complete isolated Python run reached the seven existing Spark transform tests but
   the local gateway did not start because this host resolves Java 8 and Spark 4 requires
   a newer JVM. The run was interrupted after a bounded wait. All other 81 cases passed.

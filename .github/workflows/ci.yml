@@ -108,12 +108,7 @@ jobs:
           --detector-now "${{ steps.seed.outputs.detector_now }}"
       - run: docker compose --profile product up -d --build --wait --wait-timeout 180 redis api dashboard
       - name: Verify PostgreSQL to API incident flow
-        shell: bash
-        run: |
-          set -a
-          source .env
-          set +a
-          uv run pytest -vv tests/test_product_integration.py --run-integration --run-product --junitxml=product-results.xml
+        run: uv run pytest -vv tests/test_product_integration.py --run-integration --run-product --junitxml=product-results.xml
       - if: failure()
         run: docker compose --profile product --profile airflow logs --no-color --tail 150
       - if: always()
