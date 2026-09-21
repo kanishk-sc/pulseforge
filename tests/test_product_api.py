@@ -31,6 +31,14 @@ class FakeRedis:
         return None
 
 
+class TimeoutRedis(FakeRedis):
+    async def get(self, key: str) -> str | None:
+        raise TimeoutError("cache timed out")
+
+    async def setex(self, key: str, ttl: int, value: str) -> None:
+        raise TimeoutError("cache timed out")
+
+
 @pytest.fixture
 def client():
     with TestClient(create_app()) as test_client:
@@ -89,6 +97,28 @@ def test_payment_slice_preserves_decimal_strings_and_cache_identity(client, monk
     rows.assert_awaited_once()
 
 
+def test_cache_hit_recomputes_time_sensitive_build_state(client, monkeypatch):
+    fresh = build("fresh")
+    stale = build("stale").model_copy(update={"age_seconds": 9000})
+    latest = AsyncMock(side_effect=[fresh, stale])
+    rows = AsyncMock(return_value=[payment_row()])
+    monkeypatch.setattr("pulseforge.product.api.latest_build", latest)
+    monkeypatch.setattr("pulseforge.product.api.metric_rows", rows)
+    params = {
+        "start": "2026-09-20T12:00:00Z",
+        "end": "2026-09-20T13:00:00Z",
+        "region": "us-east",
+    }
+
+    assert client.get("/api/v1/payment-health", params=params).json()["state"] == "fresh"
+    cached = client.get("/api/v1/payment-health", params=params)
+
+    assert cached.headers["X-Cache"] == "hit"
+    assert cached.json()["state"] == "stale"
+    assert cached.json()["build"]["age_seconds"] == 9000
+    rows.assert_awaited_once()
+
+
 def test_utc_boundaries_and_range_validation(client, monkeypatch):
     monkeypatch.setattr("pulseforge.product.api.latest_build", AsyncMock(return_value=build()))
     monkeypatch.setattr("pulseforge.product.api.metric_rows", AsyncMock(return_value=[]))
@@ -124,6 +154,20 @@ def test_stale_empty_and_redis_outage_are_explicit(client, monkeypatch):
     assert response.headers["X-Cache"] == "bypass"
     assert response.json()["state"] == "empty"
     assert response.json()["build"]["state"] == "stale"
+
+
+def test_redis_timeout_falls_back_to_database(client, monkeypatch):
+    client.app.state.redis = TimeoutRedis()
+    monkeypatch.setattr("pulseforge.product.api.latest_build", AsyncMock(return_value=build()))
+    rows = AsyncMock(return_value=[payment_row()])
+    monkeypatch.setattr("pulseforge.product.api.metric_rows", rows)
+
+    response = client.get("/api/v1/payment-health")
+
+    assert response.status_code == 200
+    assert response.headers["X-Cache"] == "bypass"
+    assert response.json()["points"][0]["payment_attempt_count"] == 4
+    rows.assert_awaited_once()
 
 
 def test_unpublished_and_database_unavailable_are_not_fabricated(client, monkeypatch):

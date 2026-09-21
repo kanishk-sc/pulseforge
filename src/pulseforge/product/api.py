@@ -1,3 +1,4 @@
+import asyncio
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Literal
 from uuid import UUID
@@ -73,7 +74,7 @@ def create_product_router(settings: Settings) -> APIRouter:
             build = await latest_build(
                 request.app.state.engine, settings.analytics_stale_after_seconds
             )
-        except SQLAlchemyError as exc:
+        except (SQLAlchemyError, TimeoutError) as exc:
             raise HTTPException(status_code=503, detail="analytics_warehouse_unavailable") from exc
         if build is None:
             raise HTTPException(status_code=503, detail="analytics_publication_unavailable")
@@ -90,11 +91,16 @@ def create_product_router(settings: Settings) -> APIRouter:
             )
         )
         try:
-            cached = await request.app.state.redis.get(cache_key)
+            async with asyncio.timeout(0.5):
+                cached = await request.app.state.redis.get(cache_key)
             if cached:
                 response.headers["X-Cache"] = "hit"
-                return MetricResponse.model_validate_json(cached)
-        except RedisError:
+                cached_result = MetricResponse.model_validate_json(cached)
+                # Cache the immutable points, but recompute time-sensitive publication state.
+                cached_result.build = build
+                cached_result.state = "empty" if not cached_result.points else build.state
+                return cached_result
+        except (RedisError, TimeoutError):
             pass
         try:
             points = await metric_rows(
@@ -106,7 +112,7 @@ def create_product_router(settings: Settings) -> APIRouter:
                 region,
                 limit,
             )
-        except SQLAlchemyError as exc:
+        except (SQLAlchemyError, TimeoutError) as exc:
             raise HTTPException(status_code=503, detail="analytics_warehouse_unavailable") from exc
         for point in points:
             point.pop("build_id", None)
@@ -123,11 +129,12 @@ def create_product_router(settings: Settings) -> APIRouter:
             points=points,
         )
         try:
-            await request.app.state.redis.setex(
-                cache_key, settings.analytics_cache_ttl_seconds, result.model_dump_json()
-            )
+            async with asyncio.timeout(0.5):
+                await request.app.state.redis.setex(
+                    cache_key, settings.analytics_cache_ttl_seconds, result.model_dump_json()
+                )
             response.headers["X-Cache"] = "miss"
-        except RedisError:
+        except (RedisError, TimeoutError):
             response.headers["X-Cache"] = "bypass"
         return result
 
@@ -199,7 +206,7 @@ def create_product_router(settings: Settings) -> APIRouter:
                     request.app.state.engine, settings.analytics_stale_after_seconds
                 )
             )
-        except SQLAlchemyError as exc:
+        except (SQLAlchemyError, TimeoutError) as exc:
             raise HTTPException(status_code=503, detail="analytics_warehouse_unavailable") from exc
 
     @router.get("/pipeline/status", response_model=PipelineStatus, tags=["product"])
@@ -211,7 +218,7 @@ def create_product_router(settings: Settings) -> APIRouter:
                 )
             )
             return PipelineStatus(analytics=quality)
-        except SQLAlchemyError as exc:
+        except (SQLAlchemyError, TimeoutError) as exc:
             raise HTTPException(status_code=503, detail="analytics_warehouse_unavailable") from exc
 
     @router.get("/incidents", response_model=IncidentList, tags=["incidents"])
@@ -228,7 +235,7 @@ def create_product_router(settings: Settings) -> APIRouter:
             )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail="invalid_cursor") from exc
-        except SQLAlchemyError as exc:
+        except (SQLAlchemyError, TimeoutError) as exc:
             raise HTTPException(status_code=503, detail="analytics_warehouse_unavailable") from exc
         return IncidentList(
             items=[IncidentSummary.model_validate(row) for row in rows],
@@ -239,7 +246,7 @@ def create_product_router(settings: Settings) -> APIRouter:
     async def incident(request: Request, incident_id: UUID) -> IncidentDetail:
         try:
             item = await incident_detail(request.app.state.engine, incident_id)
-        except SQLAlchemyError as exc:
+        except (SQLAlchemyError, TimeoutError) as exc:
             raise HTTPException(status_code=503, detail="analytics_warehouse_unavailable") from exc
         if item is None:
             raise HTTPException(status_code=404, detail="incident_not_found")

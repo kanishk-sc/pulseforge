@@ -3,6 +3,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from pulseforge.product.detectors import (
+    order_volume_candidate,
     rate_increase_candidate,
     volume_drop_candidate,
 )
@@ -71,3 +72,12 @@ def test_volume_drop_uses_history_only_and_has_stable_key():
     assert candidate.threshold == Decimal("20.0")
     build_id = UUID("00000000-0000-0000-0000-000000000001")
     assert candidate.uniqueness_key(build_id) == candidate.uniqueness_key(build_id)
+
+
+def test_volume_drop_treats_missing_current_hour_as_zero_activity():
+    historical = [{"order_count": 40} for _ in range(12)]
+    candidate = order_volume_candidate("us-east", START, None, historical)
+
+    assert candidate is not None
+    assert candidate.observed_metric == Decimal("0")
+    assert candidate.severity == "critical"

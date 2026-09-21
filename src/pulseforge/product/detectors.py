@@ -130,6 +130,22 @@ def volume_drop_candidate(
     )
 
 
+def order_volume_candidate(
+    region: str,
+    start: datetime,
+    current: dict | None,
+    historical: list[dict],
+) -> Candidate | None:
+    """Evaluate a missing current row as zero orders, not as missing detector input."""
+    observed = current["order_count"] if current else 0
+    return volume_drop_candidate(
+        region,
+        start,
+        observed,
+        [row["order_count"] for row in historical],
+    )
+
+
 def _rows(connection: psycopg.Connection, query: str, params: tuple) -> list[dict]:
     with connection.cursor(row_factory=psycopg.rows.dict_row) as cursor:
         cursor.execute(query, params)
@@ -139,29 +155,33 @@ def _rows(connection: psycopg.Connection, query: str, params: tuple) -> list[dic
 def _evidence(
     connection: psycopg.Connection,
     build_id: UUID,
-    evidence_kind: str,
+    evidence_kinds: tuple[str, ...],
     region: str,
     start: datetime,
     end: datetime,
 ) -> tuple[tuple[UUID, datetime, str], ...]:
     rows = _rows(
         connection,
-        """SELECT source_event_id, event_ts FROM product.analytics_evidence
-           WHERE build_id=%s AND evidence_kind=%s AND region_code=%s
-             AND event_ts>=%s AND event_ts<%s
-           ORDER BY event_ts, source_event_id LIMIT 25""",
-        (build_id, evidence_kind, region, start, end),
+        """SELECT source_event_id, event_ts, evidence_kind FROM product.analytics_evidence
+           WHERE build_id=%s AND evidence_kind=ANY(%s) AND region_code=%s
+             AND evaluation_ts>=%s AND evaluation_ts<%s
+           ORDER BY event_ts, source_event_id, evidence_kind LIMIT 25""",
+        (build_id, list(evidence_kinds), region, start, end),
     )
-    return tuple((row["source_event_id"], row["event_ts"], evidence_kind) for row in rows)
+    return tuple((row["source_event_id"], row["event_ts"], row["evidence_kind"]) for row in rows)
 
 
-def evaluate(connection: psycopg.Connection, now: datetime | None = None) -> list[UUID]:
+def evaluate(
+    connection: psycopg.Connection,
+    now: datetime | None = None,
+    stale_after_seconds: int = 7200,
+) -> list[UUID]:
     now = (now or datetime.now(UTC)).astimezone(UTC)
     build = connection.execute(
         """SELECT build_id, published_at FROM product.analytics_builds
            WHERE status='succeeded' ORDER BY published_at DESC LIMIT 1"""
     ).fetchone()
-    if build is None or now - build[1] > timedelta(hours=2):
+    if build is None or now - build[1] > timedelta(seconds=stale_after_seconds):
         return []
     build_id = build[0]
     evaluation_start = now.replace(minute=0, second=0, microsecond=0) - timedelta(hours=1)
@@ -207,7 +227,7 @@ def evaluate(connection: psycopg.Connection, now: datetime | None = None) -> lis
                             "evidence": _evidence(
                                 connection,
                                 build_id,
-                                "payment_attempt",
+                                ("payment_attempt",),
                                 region,
                                 evaluation_start,
                                 evaluation_start + timedelta(hours=1),
@@ -259,7 +279,7 @@ def evaluate(connection: psycopg.Connection, now: datetime | None = None) -> lis
                             "evidence": _evidence(
                                 connection,
                                 build_id,
-                                "shipment_cohort",
+                                ("shipment_cohort", "shipment_delay"),
                                 region,
                                 mature_start,
                                 mature_start + timedelta(hours=1),
@@ -306,7 +326,7 @@ def evaluate(connection: psycopg.Connection, now: datetime | None = None) -> lis
                             "evidence": _evidence(
                                 connection,
                                 build_id,
-                                "refund_request",
+                                ("refund_request",),
                                 region,
                                 evaluation_start,
                                 evaluation_start + timedelta(hours=1),
@@ -314,28 +334,23 @@ def evaluate(connection: psycopg.Connection, now: datetime | None = None) -> lis
                         }
                     )
                 )
-            candidate = volume_drop_candidate(
-                region,
-                evaluation_start,
-                current_ops["order_count"],
-                [row["order_count"] for row in historical],
+        candidate = order_volume_candidate(region, evaluation_start, current_ops, historical)
+        if candidate:
+            candidates.append(
+                Candidate(
+                    **{
+                        **candidate.__dict__,
+                        "evidence": _evidence(
+                            connection,
+                            build_id,
+                            ("order",),
+                            region,
+                            evaluation_start,
+                            evaluation_start + timedelta(hours=1),
+                        ),
+                    }
+                )
             )
-            if candidate:
-                candidates.append(
-                    Candidate(
-                        **{
-                            **candidate.__dict__,
-                            "evidence": _evidence(
-                                connection,
-                                build_id,
-                                "order",
-                                region,
-                                evaluation_start,
-                                evaluation_start + timedelta(hours=1),
-                            ),
-                        }
-                    )
-                )
 
     created: list[UUID] = []
     with connection.transaction():

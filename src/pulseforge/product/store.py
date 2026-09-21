@@ -96,7 +96,10 @@ def decode_cursor(cursor: str) -> tuple[datetime, UUID]:
     try:
         raw = base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4)).decode()
         timestamp, incident_id = raw.split("|", 1)
-        return datetime.fromisoformat(timestamp), UUID(incident_id)
+        detected_at = datetime.fromisoformat(timestamp)
+        if detected_at.tzinfo is None or detected_at.utcoffset() is None:
+            raise ValueError("cursor timestamp must include a timezone")
+        return detected_at.astimezone(UTC), UUID(incident_id)
     except (ValueError, UnicodeError) as exc:
         raise ValueError("invalid cursor") from exc
 

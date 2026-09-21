@@ -7,6 +7,7 @@ from pathlib import Path
 
 import psycopg
 
+from pulseforge.config import Settings
 from pulseforge.product.detectors import evaluate
 from pulseforge.product.publication import (
     begin_build,
@@ -33,11 +34,12 @@ def pipeline(
     profiles_dir: Path,
     detector_now: datetime | None = None,
 ) -> int:
+    stale_after_seconds = Settings().analytics_stale_after_seconds
     with psycopg.connect(dsn()) as connection:
         apply_migrations(connection)
         published_build = successful_build_for_key(connection, build_key)
         if published_build:
-            created = evaluate(connection, detector_now)
+            created = evaluate(connection, detector_now, stale_after_seconds)
             print(f"reused published build={published_build} incidents={len(created)}")
             return 0
         build_id = begin_build(connection, build_key)
@@ -56,7 +58,7 @@ def pipeline(
                 check=True,
             )
             publish_build(connection, build_id, project_dir / "target" / "run_results.json")
-            created = evaluate(connection, detector_now)
+            created = evaluate(connection, detector_now, stale_after_seconds)
             print(f"published build={build_id} incidents={len(created)}")
             return 0
         except Exception as exc:
@@ -87,7 +89,8 @@ def main() -> int:
         if args.command == "detect":
             apply_migrations(connection)
             now = datetime.fromisoformat(args.now) if args.now else None
-            print("created incidents:", len(evaluate(connection, now)))
+            stale_after_seconds = Settings().analytics_stale_after_seconds
+            print("created incidents:", len(evaluate(connection, now, stale_after_seconds)))
             return 0
     return pipeline(args.build_key, args.project_dir, args.profiles_dir, args.detector_now)
 

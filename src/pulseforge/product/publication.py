@@ -89,10 +89,13 @@ def _artifact_metadata(run_results: Path) -> tuple[str, str]:
     invocation_id = data.get("metadata", {}).get("invocation_id")
     if not invocation_id:
         raise ValueError("run_results.json has no dbt invocation_id")
+    results = data.get("results")
+    if not isinstance(results, list) or not results:
+        raise ValueError("run_results.json has no dbt results")
     failed = [
         result
-        for result in data.get("results", [])
-        if result.get("status") not in {"success", "pass"}
+        for result in results
+        if not isinstance(result, dict) or result.get("status") not in {"success", "pass"}
     ]
     if failed:
         raise ValueError("dbt run_results contains non-success results")
@@ -109,7 +112,8 @@ def publish_build(connection: psycopg.Connection, build_id: UUID, run_results: s
         if row is None or row[0] != "running":
             raise ValueError("analytics build is not in running state")
         source = connection.execute(
-            """SELECT max(event_ts), max(ingested_at), count(*) FROM stream_events"""
+            """SELECT max(event_ts), max(ingested_at), count(*)
+               FROM analytics_staging.stg_stream_events"""
         ).fetchone()
         for table, select_sql in SNAPSHOTS.items():
             connection.execute(f"DELETE FROM product.{table} WHERE build_id=%s", (build_id,))
@@ -120,19 +124,31 @@ def publish_build(connection: psycopg.Connection, build_id: UUID, run_results: s
         connection.execute("DELETE FROM product.analytics_evidence WHERE build_id=%s", (build_id,))
         connection.execute(
             """INSERT INTO product.analytics_evidence(
-                   build_id, source_event_id, evidence_kind, event_ts, region_code)
-               SELECT %s, source_event_id, 'payment_attempt', payment_event_ts, region_code
+                   build_id, source_event_id, evidence_kind, event_ts, evaluation_ts, region_code)
+               SELECT %s, source_event_id, 'payment_attempt', payment_event_ts,
+                      payment_event_ts, region_code
                FROM analytics_core.fct_payment_attempts
                UNION ALL
-               SELECT %s, source_event_id, 'shipment_cohort', shipment_created_at, region_code
+               SELECT %s, source_event_id, 'shipment_cohort', shipment_created_at,
+                      shipment_created_at, region_code
                FROM analytics_core.fct_shipments
                UNION ALL
-               SELECT %s, source_event_id, 'refund_request', refund_requested_at, region_code
+               SELECT %s, delayed.event_id, 'shipment_delay', delayed.event_ts,
+                      shipment.shipment_created_at, shipment.region_code
+               FROM analytics_core.fct_shipments AS shipment
+               CROSS JOIN LATERAL unnest(shipment.delay_source_event_ids)
+                   AS delay_ids(source_event_id)
+               JOIN analytics_staging.stg_stream_events AS delayed
+                 ON delayed.event_id = delay_ids.source_event_id
+               UNION ALL
+               SELECT %s, source_event_id, 'refund_request', refund_requested_at,
+                      refund_requested_at, region_code
                FROM analytics_core.fct_refund_requests
                UNION ALL
-               SELECT %s, source_event_id, 'order', order_created_at, region_code
+               SELECT %s, source_event_id, 'order', order_created_at,
+                      order_created_at, region_code
                FROM analytics_core.fct_orders""",
-            (build_id, build_id, build_id, build_id),
+            (build_id, build_id, build_id, build_id, build_id),
         )
         connection.execute(
             """UPDATE product.analytics_builds

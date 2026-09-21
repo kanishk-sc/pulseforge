@@ -63,6 +63,30 @@ def test_payment_api_matches_published_postgres_values_exactly():
     ]
 
 
+def test_publication_metadata_and_evidence_use_the_frozen_dbt_snapshot():
+    with connect() as connection:
+        build = connection.execute(
+            """SELECT build_id, source_max_event_ts, source_max_ingested_at, source_event_count
+               FROM product.analytics_builds WHERE status='succeeded'
+               ORDER BY published_at DESC, build_id DESC LIMIT 1"""
+        ).fetchone()
+        source = connection.execute(
+            """SELECT max(event_ts) AS max_event_ts, max(ingested_at) AS max_ingested_at,
+                      count(*) AS event_count
+               FROM analytics_staging.stg_stream_events"""
+        ).fetchone()
+        missing_evaluation_times = connection.execute(
+            """SELECT count(*) AS missing FROM product.analytics_evidence
+               WHERE build_id=%s AND evaluation_ts IS NULL""",
+            (build["build_id"],),
+        ).fetchone()
+
+    assert build["source_max_event_ts"] == source["max_event_ts"]
+    assert build["source_max_ingested_at"] == source["max_ingested_at"]
+    assert build["source_event_count"] == source["event_count"]
+    assert missing_evaluation_times["missing"] == 0
+
+
 def test_failed_build_never_replaces_latest_successful_publication():
     with connect() as connection:
         failed_build_id = begin_build(
