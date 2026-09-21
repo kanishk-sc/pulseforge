@@ -407,6 +407,7 @@ not a throughput or availability benchmark.
 | Live product integration | **3 passed**: exact PostgreSQL/API values, failed-build isolation, and exact incident/evidence response |
 | Dashboard container | Production bundle built and served healthy at `http://127.0.0.1:5173` |
 | Real browser | Overview, incident navigation/evidence, region filter, exact payment anomaly and analytics status visibly verified in Chrome |
+| Hosted CI | [Run 35550659094](https://github.com/kanishk-sc/pulseforge/actions/runs/35550659094): Python/frontend, Compose streaming, analytics and product integration all passed |
 
 The deterministic fixture committed 140 contract-valid payment records through the
 existing replay-safe ingestion boundary. Six `ap-south` baseline hours each contained
@@ -482,5 +483,6 @@ uv run pytest tests/test_product_integration.py --run-integration --run-product
 
 In PowerShell, copy the printed `detector_now` value into the final pipeline command.
 On Bash, it can be parsed from the seed JSON as the CI workflow does. Do not reuse a
-successful build key. No hosted Phase 4 result is claimed until the branch is pushed and
-the new workflow completes.
+successful build key. The first hosted run, 35543281711, found the `.env` shell-parsing
+issue described above; the corrected run 35550659094 completed all four jobs
+successfully on commit `521b03d`.
