@@ -486,3 +486,63 @@ On Bash, it can be parsed from the seed JSON as the CI workflow does. Do not reu
 successful build key. The first hosted run, 35543281711, found the `.env` shell-parsing
 issue described above; the corrected run 35550659094 completed all four jobs
 successfully on commit `521b03d`.
+
+# Phase 4 PR review and hardening — 2026-09-21
+
+PR #4 was reviewed against current `main`, including the complete diff, surrounding
+Phase 1–3 ingestion/streaming/analytics code, the live PR state and review threads.
+There were no submitted human reviews or unresolved review comments at review start.
+This pass found and corrected material publication, detector, cache and browser-state
+defects without changing the Phase 1 event contract or Phase 2 checkpoint semantics.
+
+## Corrections
+
+- Publication source count and watermarks now come from the frozen
+  `analytics_staging.stg_stream_events` table, so metadata cannot advance beyond the
+  marts in the same repeatable-read publication.
+- Empty dbt `results` artifacts fail closed instead of publishing an unverified build.
+- Migration `0003` adds detector evaluation time and shipment-delay evidence. Shipment
+  incidents can now cite the actual delayed-event UUID and timestamp as well as the
+  creation cohort that determines the evaluated window.
+- The order-volume detector treats an absent current row as zero activity once 12
+  historical windows exist. Detector staleness follows `ANALYTICS_STALE_AFTER_SECONDS`.
+- Redis responses recompute time-sensitive build age/state. Cache operations have a
+  500 ms application deadline and both Redis and built-in timeout failures fall back to
+  PostgreSQL. Database timeouts become controlled 503 responses.
+- Incident cursors reject timezone-naive timestamps.
+- The dashboard verifies that all five metrics and status belong to one publication,
+  retries one cross-publication batch, clears superseded filter results, and aborts
+  replaced incident-detail requests.
+- Table headings now use valid IDs, column headers declare scope, the page has a working
+  skip link, and animation respects reduced-motion preference.
+
+## Exact local commands and observed results
+
+The existing Windows `.venv` was held open by the running development stack, so clean
+Python checks used uv's isolated environment with copy mode. The first non-isolated
+`uv run` attempt failed while trying to replace locked package files; it did not produce
+test evidence. The successful commands were:
+
+| Command | Observed result |
+| --- | --- |
+| `$env:UV_LINK_MODE='copy'; uv run --isolated ruff format --check .` | 76 files already formatted |
+| `$env:UV_LINK_MODE='copy'; uv run --isolated ruff check .` | All checks passed |
+| `$env:UV_LINK_MODE='copy'; uv run --isolated pytest --basetemp .pytest_cache/review2 -m "not integration and not spark and not streaming and not analytics and not product" -q` | **88 passed**, 30 deselected; two upstream deprecation warnings |
+| `npm test -- --run` | **5 passed** in two Vitest files |
+| `npm run typecheck` | Exit 0 |
+| `npm run build` | Exit 0; production Vite bundle generated |
+| `docker compose --profile product run --rm --build product-migrate` | Migration `0003` applied |
+| `uv run --isolated python scripts/seed_product_acceptance.py` | 140 requested, 100 newly inserted; deterministic clock `2026-09-21T02:01:00Z` |
+| `docker compose --profile airflow run --rm --no-deps airflow python -m pulseforge.product.cli pipeline --build-key pr4-review-20260921a --project-dir /opt/pulseforge/analytics --profiles-dir /opt/pulseforge/analytics --detector-now 2026-09-21T02:01:00+00:00` | dbt **PASS=109, WARN=0, ERROR=0, SKIP=0**; build `e3598730-4c4d-4a55-aeff-7fac3334b051` published |
+| `docker compose --profile airflow run --rm --no-deps airflow python /opt/pulseforge/scripts/verify_airflow_dag.py` | Zero import errors; only `verify_warehouse`, `dbt_build`, `quality_summary` |
+| `uv run --isolated pytest --basetemp .pytest_cache/product-review -vv tests/test_product_integration.py --run-integration --run-product` | **4 passed**; exact PostgreSQL/API values, frozen metadata, failed-build isolation and incident evidence |
+| `uv run --isolated pytest --basetemp .pytest_cache/stream-review -m integration --run-integration --run-streaming -q` | **15 passed, 8 skipped**, 94 deselected in 300.02 seconds |
+| `uv run --isolated pytest --basetemp .pytest_cache/analytics-review -m analytics --run-integration --run-analytics -q` | **4 passed**, 113 deselected in 78.81 seconds |
+| `docker compose stop redis` plus a live product request | HTTP 200, `X-Cache: bypass`; dashboard remained available after the timeout fix |
+| `docker compose stop postgres` plus dashboard Refresh, then restore and Retry | Explicit `analytics warehouse unavailable`, no cross-filter data; successful recovery to the same build |
+
+Chrome visibly verified Overview totals, `ap-south` filtering, payment rows, immature
+shipment labeling, the fresh publication status, the working skip target, and the
+critical payment incident with all 20 source-event evidence rows. Redis and PostgreSQL
+were restored healthy after the controlled failure checks. This is correctness evidence,
+not a throughput, availability or scalability benchmark.

@@ -30,7 +30,8 @@ metrics, incidents and evidence.
 2. run `dbt build`, including all data tests;
 3. reject missing, malformed, or non-successful `run_results.json` artifacts;
 4. begin one PostgreSQL `REPEATABLE READ` transaction;
-5. record source event/ingestion watermarks and count;
+5. record source event/ingestion watermarks and count from the same frozen dbt staging
+   snapshot used by downstream models;
 6. copy all five current dbt marts into build-tagged product tables; and
 7. mark the build successful and publish it in the same transaction.
 
@@ -63,8 +64,9 @@ The versioned migration creates:
 
 Incident uniqueness includes detector name/version, region, evaluation interval and
 analytics build. Incidents have an explicit open/resolved lifecycle. Evidence stores
-source event UUID, event timestamp and its role in the finding. It does not copy customer
-or payment data into the incident row.
+source event UUID, source timestamp, detector evaluation timestamp and its role in the
+finding. Shipment findings retain both creation-cohort and actual delay event UUIDs.
+The incident row does not copy customer or payment data.
 
 ## Versioned API contract
 
@@ -88,8 +90,11 @@ pages allow at most 100 rows. Decimal database values serialize as strings so Ja
 does not silently round money or detector thresholds.
 
 Cache keys include endpoint, successful build ID, exact interval, region and limit.
-TTL is bounded. Redis timeouts/errors bypass caching and read PostgreSQL; errors and 503
-responses are never cached. Database failures return a controlled 503. Local Compose
+TTL is bounded. Each Redis operation has a 500 ms application deadline; connection,
+protocol and timeout errors bypass caching and read PostgreSQL. Cached immutable points
+are relabeled with the current build age so a cached `fresh` response cannot outlive its
+freshness threshold. Errors and 503 responses are never cached. Database failures return
+a controlled 503. Local Compose
 binds ports to loopback and remains unauthenticated; TLS, authentication, authorization,
 rate limiting and least-privilege database roles are required before network exposure.
 
@@ -109,6 +114,9 @@ Shipment detection evaluates a creation cohort only after 24 hours. A six-hour c
 suppresses repeated open findings for the same detector and region. Stable uniqueness
 also makes retries idempotent. Incident and up to 25 ordered evidence references are
 inserted in one transaction. Detection is finite and statistical; no LLM participates.
+An absent current operations row is evaluated as zero orders for the volume-drop rule;
+it is not silently skipped when the historical minimum is satisfied. Detector freshness
+uses the same configured publication-age threshold as the API.
 
 ## Dashboard behavior
 
@@ -123,6 +131,10 @@ errors back off exponentially to 120 seconds. Loading, empty, stale, unavailable
 error states are distinct. Incident selection from Overview navigates directly to its
 threshold and source evidence. Navigation, filters, controls and focus styles are
 keyboard-accessible and responsive.
+All five metric responses and analytics status must identify one build. If a publication
+lands during the parallel request batch, the client retries the batch once and otherwise
+shows an error rather than combining generations. Filter changes clear the prior result
+before loading, and incident-detail requests cancel on replacement or filter teardown.
 
 ## Deterministic acceptance fixture
 
