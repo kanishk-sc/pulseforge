@@ -93,6 +93,12 @@ describe("operations dashboard", () => {
     expect(screen.getByText("25.0%")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Shipments" }));
     expect(screen.getByText("No trustworthy rows exist for this selection.")).toBeInTheDocument();
+    const panel = screen.getByRole("heading", { name: "Shipment health" }).closest("section");
+    expect(panel).toHaveAttribute("aria-labelledby", "shipment-health-heading");
+    expect(screen.getByRole("link", { name: "Skip to main content" })).toHaveAttribute(
+      "href",
+      "#main-content",
+    );
   });
 
   it("labels stale successful data", async () => {

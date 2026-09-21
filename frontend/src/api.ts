@@ -114,6 +114,13 @@ export interface DashboardData {
   incidents: Incident[];
 }
 
+class PublicationChangedError extends Error {
+  constructor() {
+    super("analytics publication changed during dashboard load");
+    this.name = "PublicationChangedError";
+  }
+}
+
 async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   const response = await fetch(path, { signal, headers: { Accept: "application/json" } });
   if (!response.ok) {
@@ -137,7 +144,7 @@ export function metricQuery(hours: number, region: Region | "all"): string {
   return params.toString();
 }
 
-export async function loadDashboard(
+async function loadDashboardOnce(
   hours: number,
   region: Region | "all",
   signal?: AbortSignal,
@@ -155,6 +162,13 @@ export async function loadDashboard(
       getJson<QualityStatus>("/api/v1/analytics/status", signal),
       getJson<{ items: Incident[] }>(`/api/v1/incidents?${incidentParams}`, signal),
     ]);
+  const buildId = quality.build?.build_id;
+  const metricBuildIds = [payments, revenue, shipments, refunds, operations].map(
+    (metric) => metric.build.build_id,
+  );
+  if (!buildId || metricBuildIds.some((candidate) => candidate !== buildId)) {
+    throw new PublicationChangedError();
+  }
   return {
     payments,
     revenue,
@@ -164,6 +178,19 @@ export async function loadDashboard(
     quality,
     incidents: incidentList.items,
   };
+}
+
+export async function loadDashboard(
+  hours: number,
+  region: Region | "all",
+  signal?: AbortSignal,
+): Promise<DashboardData> {
+  try {
+    return await loadDashboardOnce(hours, region, signal);
+  } catch (reason) {
+    if (!(reason instanceof PublicationChangedError) || signal?.aborted) throw reason;
+    return loadDashboardOnce(hours, region, signal);
+  }
 }
 
 export function loadIncident(incidentId: string, signal?: AbortSignal): Promise<IncidentDetail> {

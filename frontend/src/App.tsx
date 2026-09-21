@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   DashboardData,
   Incident,
@@ -75,11 +75,12 @@ function DataTable({
   columns: Column[];
   rows: Array<Record<string, unknown>>;
 }) {
+  const headingId = `${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-heading`;
   return (
-    <section className="panel" aria-labelledby={`${title}-heading`}>
+    <section className="panel" aria-labelledby={headingId}>
       <header>
         <div>
-          <h2 id={`${title}-heading`}>{title}</h2>
+          <h2 id={headingId}>{title}</h2>
           <p>{definition}</p>
         </div>
         <span className="utc-label">All times UTC</span>
@@ -90,7 +91,7 @@ function DataTable({
         <div className="table-wrap">
           <table>
             <thead>
-              <tr>{columns.map((column) => <th key={column.label}>{column.label}</th>)}</tr>
+              <tr>{columns.map((column) => <th scope="col" key={column.label}>{column.label}</th>)}</tr>
             </thead>
             <tbody>
               {rows.map((row, index) => (
@@ -142,11 +143,16 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [revision, setRevision] = useState(0);
   const [selected, setSelected] = useState<IncidentDetail | null>(null);
+  const detailController = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
     let timer: number | undefined;
     let delay = 30_000;
+    setLoading(true);
+    setData(null);
+    setSelected(null);
+    detailController.current?.abort();
     const refresh = async () => {
       try {
         const result = await loadDashboard(hours, region, controller.signal);
@@ -170,14 +176,20 @@ export default function App() {
   }, [hours, region, revision]);
 
   const selectIncident = useCallback(async (incident: Incident) => {
+    detailController.current?.abort();
+    const controller = new AbortController();
+    detailController.current = controller;
     setView("incidents");
     setSelected(null);
     try {
-      setSelected(await loadIncident(incident.incident_id));
+      setSelected(await loadIncident(incident.incident_id, controller.signal));
     } catch (reason) {
+      if ((reason as Error).name === "AbortError") return;
       setError((reason as Error).message);
     }
   }, []);
+
+  useEffect(() => () => detailController.current?.abort(), []);
 
   const totals = useMemo(
     () =>
@@ -203,7 +215,8 @@ export default function App() {
   const commonRegion: Column = { label: "Region", value: (row) => String(row.region_code) };
 
   return (
-    <main className="app-shell">
+    <div className="app-shell">
+      <a className="skip-link" href="#main-content">Skip to main content</a>
       <aside>
         <div className="brand">
           <span className="brand-mark">PF</span>
@@ -223,7 +236,7 @@ export default function App() {
         <div className="synthetic"><span /> Synthetic commerce data</div>
       </aside>
 
-      <div className="workspace">
+      <main className="workspace" id="main-content" tabIndex={-1}>
         <header className="topbar">
           <div><span className="eyebrow">Build-aware analytics</span><h1>{views.find((item) => item.id === view)?.label}</h1></div>
           <div className="filters">
@@ -248,7 +261,7 @@ export default function App() {
         )}
         {error && (
           <div className="banner error" role="alert">
-            <strong>Data unavailable.</strong> {error}. Previously loaded data remains labeled with its build.
+            <strong>Data unavailable.</strong> {error}. Any retained data remains labeled with its build.
             <button onClick={() => setRevision((value) => value + 1)}>Retry</button>
           </div>
         )}
@@ -301,7 +314,7 @@ export default function App() {
           </>
         ) : null}
         <footer>UTC intervals use <code>[start,end)</code>. Build identity is included in every metric response and cache key.</footer>
-      </div>
-    </main>
+      </main>
+    </div>
   );
 }

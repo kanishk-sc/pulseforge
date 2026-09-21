@@ -8,6 +8,8 @@
 body { margin: 0; min-width: 320px; min-height: 100vh; background: #f4f6f1; }
 button, select { font: inherit; }
 button:focus-visible, select:focus-visible { outline: 3px solid #a7e96d; outline-offset: 2px; }
+.skip-link { position: fixed; z-index: 10; top: 8px; left: 8px; padding: 9px 12px; border-radius: 7px; background: #fff; color: #12231c; transform: translateY(-150%); }
+.skip-link:focus { transform: translateY(0); }
 .app-shell { min-height: 100vh; display: grid; grid-template-columns: 250px 1fr; }
 aside { position: sticky; top: 0; height: 100vh; padding: 28px 18px; background: #12231c; color: #eef8f1; display: flex; flex-direction: column; }
 .brand { display: flex; align-items: center; gap: 12px; padding: 0 10px 26px; }
@@ -78,6 +80,9 @@ tbody tr:hover { background: #f8faf6; }
 .status-panel { max-width: 920px; }
 footer { padding: 22px 3px 0; color: #7d877f; font-size: 11px; }
 @keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
 @media (max-width: 1050px) {
   .metrics { grid-template-columns: repeat(2, 1fr); }
   .overview-grid, .incident-layout { grid-template-columns: 1fr; }
