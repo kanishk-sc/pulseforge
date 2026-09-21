@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import re
 import time
@@ -23,6 +24,7 @@ from pulseforge.analytics import (
 from pulseforge.config import Settings
 from pulseforge.dependencies import check_dependencies
 from pulseforge.logging import configure_logging
+from pulseforge.product.api import create_product_router
 from pulseforge.telemetry import (
     ANALYTICS_QUERY_FAILURES,
     CACHE_OPERATIONS,
@@ -66,6 +68,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             await app.state.engine.dispose()
 
     app = FastAPI(title="PulseForge API", version="0.1.0", lifespan=lifespan)
+    app.include_router(create_product_router(settings))
     app.middleware("http")(observe_request)
 
     @app.middleware("http")
@@ -114,28 +117,30 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> tuple[AnalyticsOverview, str]:
         cache_key = f"analytics:overview:v1:{hours}"
         try:
-            cached = await redis_client.get(cache_key)
+            async with asyncio.timeout(0.5):
+                cached = await redis_client.get(cache_key)
             if cached:
                 CACHE_OPERATIONS.labels("get", "hit").inc()
                 return AnalyticsOverview.model_validate_json(cached), "hit"
             CACHE_OPERATIONS.labels("get", "miss").inc()
-        except RedisError:
+        except (RedisError, TimeoutError):
             CACHE_OPERATIONS.labels("get", "unavailable").inc()
 
         try:
             overview = await fetch_overview(engine, hours)
-        except SQLAlchemyError as exc:
+        except (SQLAlchemyError, TimeoutError) as exc:
             ANALYTICS_QUERY_FAILURES.inc()
             logger.warning("analytics_query_failed", extra={"error_type": type(exc).__name__})
             raise HTTPException(status_code=503, detail="analytics_warehouse_unavailable") from exc
         try:
-            await redis_client.setex(
-                cache_key,
-                settings.analytics_cache_ttl_seconds,
-                overview.model_dump_json(),
-            )
+            async with asyncio.timeout(0.5):
+                await redis_client.setex(
+                    cache_key,
+                    settings.analytics_cache_ttl_seconds,
+                    overview.model_dump_json(),
+                )
             CACHE_OPERATIONS.labels("set", "stored").inc()
-        except RedisError:
+        except (RedisError, TimeoutError):
             CACHE_OPERATIONS.labels("set", "unavailable").inc()
         return overview, "miss"
 
@@ -163,7 +168,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def pipeline_status(request: Request) -> PipelineStatus:
         try:
             return await fetch_pipeline_status(request.app.state.engine)
-        except SQLAlchemyError as exc:
+        except (SQLAlchemyError, TimeoutError) as exc:
             ANALYTICS_QUERY_FAILURES.inc()
             raise HTTPException(status_code=503, detail="analytics_warehouse_unavailable") from exc
 

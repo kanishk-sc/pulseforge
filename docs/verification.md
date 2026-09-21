@@ -381,3 +381,168 @@ cannot be recovered by dbt. Shipment cohort attribution requires one creation pe
 unmatched delays remain source evidence. Full source rescans, local SQLite Airflow
 metadata, the shared development PostgreSQL role and single-node services remain
 intentional development limits. No performance benchmark or Phase 4 feature is claimed.
+
+# Phase 4 product verification — 2026-09-20
+
+Phase 4 was implemented from merged `main` commit
+`3594f2728362f656219c4099e960fe2cfb277db3`. Verification used the live Compose
+PostgreSQL/Kafka/MinIO/Spark foundation, real dbt and Airflow images, Redis, FastAPI,
+the production dashboard container and Chrome. This is functional correctness evidence,
+not a throughput or availability benchmark.
+
+## Executed results
+
+| Check | Observed result |
+| --- | --- |
+| Ruff format/check | 74 files already formatted; all checks passed |
+| Lockfile | `uv lock --check` resolved 69 packages without changes |
+| Python non-Spark regression | **81 passed**, 22 integration cases deselected, two existing upstream deprecation warnings |
+| Product/API-focused unit tests | **13 passed**, including detector thresholds, stale/empty/unavailable states, UTC bounds, decimal serialization, Redis bypass and incident filtering |
+| Frontend | **4 Vitest tests passed**; TypeScript check and production Vite build exited 0 |
+| Frontend dependency audit | `npm audit --audit-level=high`: zero vulnerabilities |
+| Compose validation | Default and streaming/analytics/Airflow/product/observability profile combinations exited 0 |
+| Product migrations | `0001` and `0002` applied; repeat runs report no pending migration |
+| Airflow DAG import | Zero import errors; existing three-task linear graph preserved |
+| dbt product runs | 14 models, 94 data tests and one hook: **PASS=109, WARN=0, ERROR=0, SKIP=0** |
+| Live product integration | **3 passed**: exact PostgreSQL/API values, failed-build isolation, and exact incident/evidence response |
+| Dashboard container | Production bundle built and served healthy at `http://127.0.0.1:5173` |
+| Real browser | Overview, incident navigation/evidence, region filter, exact payment anomaly and analytics status visibly verified in Chrome |
+| Hosted CI | [Run 35550659094](https://github.com/kanishk-sc/pulseforge/actions/runs/35550659094): Python/frontend, Compose streaming, analytics and product integration all passed |
+
+The deterministic fixture committed 140 contract-valid payment records through the
+existing replay-safe ingestion boundary. Six `ap-south` baseline hours each contained
+20 successful attempts. The evaluation hour contained 20 failed attempts. The final
+successful publication was:
+
+- build `7a8dceed-7f77-44eb-b275-0f42a253c629`;
+- dbt invocation `2ab6af20-1c6f-4ffb-a384-c06f68a584ef`;
+- 370 committed source events; and
+- published at `2026-09-20T22:50:42.596555Z`.
+
+Detector version `1.0.0` created open incident
+`4a1791b0-5222-4622-98bf-a8fe15aff83c` with observed rate `1.000000`, denominator
+`20`, baseline `0.000000`, threshold `0.100000`, critical severity and exactly 20
+source-event evidence rows. Both the incident evidence and its detector input are tied
+to the same immutable build; SQL independently counted 20 rows in each set. Repeating
+the evaluation created zero additional incidents.
+
+The browser showed the same build and values. Filtering Payment Health to `ap-south`
+displayed six healthy windows followed by 20 attempts, 20 failures and a 100.0% rate.
+Selecting the finding from Overview navigated to the evidence panel and rendered all
+20 UUIDs. Analytics Status showed the successful publication, source watermark and the
+earlier failed build without claiming Spark liveness.
+
+## Failure and recovery evidence
+
+- The first publication attempt used an incorrect flat `analytics` schema. dbt itself
+  passed all 109 nodes, publication rolled back, and build
+  `901c60ee-495b-407d-8433-62b4daa65fae` was retained as failed. Correcting the names
+  to `analytics_marts` and `analytics_core` produced a successful build; the API never
+  served the failed attempt.
+- The first persisted incident attempt exposed use of `Connection.executemany`, which
+  Psycopg 3 provides on a cursor. The incident transaction rolled back. Switching to a
+  cursor produced one incident plus 20 evidence rows; a repeat produced zero. The
+  pipeline also now resumes an already-published build key by rerunning only detection,
+  so this exact post-publication failure is recoverable on an Airflow retry.
+- Incident list/detail initially selected every database column, and strict response
+  models rejected internal uniqueness fields. Explicit public projections fixed both
+  routes; live list/detail calls returned 200.
+- Browser testing found that Overview incident selection loaded detail without changing
+  views. The action now navigates to Incidents; a component test and the repeated real
+  browser flow verify it.
+- Evidence initially came from mutable dbt facts after publication. Migration `0002`
+  adds a build-tagged evidence snapshot inside the repeatable-read publication, and all
+  detectors now read that immutable projection.
+- Vitest 3 initially produced a dependency audit finding. Upgrading to Vitest 5.0.1
+  retained passing tests and reduced `npm audit` to zero vulnerabilities.
+- Host PostgreSQL access through `localhost` stalled on this Windows configuration;
+  product integration defaults now use `127.0.0.1` and a five-second connect timeout.
+- The first Phase 4 hosted product job sourced `.env` in Bash; the valid unquoted value
+  `10 minutes` was interpreted as a command. The application pipeline had already
+  succeeded. The test now loads the project's typed settings directly, avoiding shell
+  parsing of environment files; the exact local integration rerun passed 3/3.
+- The complete isolated Python run reached the seven existing Spark transform tests but
+  the local gateway did not start because this host resolves Java 8 and Spark 4 requires
+  a newer JVM. The run was interrupted after a bounded wait. All other 81 cases passed.
+  The unchanged Spark tests passed in Phase 3 hosted CI, and Phase 4 CI reruns them on
+  Ubuntu while adding a separate real product-integration job.
+
+## Reproduce the product acceptance
+
+```sh
+uv sync --frozen
+uv run python scripts/init_env.py
+docker compose up -d --wait --wait-timeout 180 postgres
+docker compose --profile product run --rm --build product-migrate
+uv run python scripts/seed_product_acceptance.py
+docker compose --profile airflow build airflow
+docker compose --profile airflow run --rm --no-deps airflow python -m pulseforge.product.cli pipeline --build-key local-product-build --project-dir /opt/pulseforge/analytics --profiles-dir /opt/pulseforge/analytics --detector-now <detector_now-from-seed-output>
+docker compose --profile product up -d --build --wait --wait-timeout 180 redis api dashboard
+uv run pytest tests/test_product_integration.py --run-integration --run-product
+```
+
+In PowerShell, copy the printed `detector_now` value into the final pipeline command.
+On Bash, it can be parsed from the seed JSON as the CI workflow does. Do not reuse a
+successful build key. The first hosted run, 35543281711, found the `.env` shell-parsing
+issue described above; the corrected run 35550659094 completed all four jobs
+successfully on commit `521b03d`.
+
+# Phase 4 PR review and hardening — 2026-09-21
+
+PR #4 was reviewed against current `main`, including the complete diff, surrounding
+Phase 1–3 ingestion/streaming/analytics code, the live PR state and review threads.
+There were no submitted human reviews or unresolved review comments at review start.
+This pass found and corrected material publication, detector, cache and browser-state
+defects without changing the Phase 1 event contract or Phase 2 checkpoint semantics.
+
+## Corrections
+
+- Publication source count and watermarks now come from the frozen
+  `analytics_staging.stg_stream_events` table, so metadata cannot advance beyond the
+  marts in the same repeatable-read publication.
+- Empty dbt `results` artifacts fail closed instead of publishing an unverified build.
+- Migration `0003` adds detector evaluation time and shipment-delay evidence. Shipment
+  incidents can now cite the actual delayed-event UUID and timestamp as well as the
+  creation cohort that determines the evaluated window.
+- The order-volume detector treats an absent current row as zero activity once 12
+  historical windows exist. Detector staleness follows `ANALYTICS_STALE_AFTER_SECONDS`.
+- Redis responses recompute time-sensitive build age/state. Cache operations have a
+  500 ms application deadline and both Redis and built-in timeout failures fall back to
+  PostgreSQL. Database timeouts become controlled 503 responses.
+- Incident cursors reject timezone-naive timestamps.
+- The dashboard verifies that all five metrics and status belong to one publication,
+  retries one cross-publication batch, clears superseded filter results, and aborts
+  replaced incident-detail requests.
+- Table headings now use valid IDs, column headers declare scope, the page has a working
+  skip link, and animation respects reduced-motion preference.
+
+## Exact local commands and observed results
+
+The existing Windows `.venv` was held open by the running development stack, so clean
+Python checks used uv's isolated environment with copy mode. The first non-isolated
+`uv run` attempt failed while trying to replace locked package files; it did not produce
+test evidence. The successful commands were:
+
+| Command | Observed result |
+| --- | --- |
+| `$env:UV_LINK_MODE='copy'; uv run --isolated ruff format --check .` | 76 files already formatted |
+| `$env:UV_LINK_MODE='copy'; uv run --isolated ruff check .` | All checks passed |
+| `$env:UV_LINK_MODE='copy'; uv run --isolated pytest --basetemp .pytest_cache/review2 -m "not integration and not spark and not streaming and not analytics and not product" -q` | **88 passed**, 30 deselected; two upstream deprecation warnings |
+| `npm test -- --run` | **5 passed** in two Vitest files |
+| `npm run typecheck` | Exit 0 |
+| `npm run build` | Exit 0; production Vite bundle generated |
+| `docker compose --profile product run --rm --build product-migrate` | Migration `0003` applied |
+| `uv run --isolated python scripts/seed_product_acceptance.py` | 140 requested, 100 newly inserted; deterministic clock `2026-09-21T02:01:00Z` |
+| `docker compose --profile airflow run --rm --no-deps airflow python -m pulseforge.product.cli pipeline --build-key pr4-review-20260921a --project-dir /opt/pulseforge/analytics --profiles-dir /opt/pulseforge/analytics --detector-now 2026-09-21T02:01:00+00:00` | dbt **PASS=109, WARN=0, ERROR=0, SKIP=0**; build `e3598730-4c4d-4a55-aeff-7fac3334b051` published |
+| `docker compose --profile airflow run --rm --no-deps airflow python /opt/pulseforge/scripts/verify_airflow_dag.py` | Zero import errors; only `verify_warehouse`, `dbt_build`, `quality_summary` |
+| `uv run --isolated pytest --basetemp .pytest_cache/product-review -vv tests/test_product_integration.py --run-integration --run-product` | **4 passed**; exact PostgreSQL/API values, frozen metadata, failed-build isolation and incident evidence |
+| `uv run --isolated pytest --basetemp .pytest_cache/stream-review -m integration --run-integration --run-streaming -q` | **15 passed, 8 skipped**, 94 deselected in 300.02 seconds |
+| `uv run --isolated pytest --basetemp .pytest_cache/analytics-review -m analytics --run-integration --run-analytics -q` | **4 passed**, 113 deselected in 78.81 seconds |
+| `docker compose stop redis` plus a live product request | HTTP 200, `X-Cache: bypass`; dashboard remained available after the timeout fix |
+| `docker compose stop postgres` plus dashboard Refresh, then restore and Retry | Explicit `analytics warehouse unavailable`, no cross-filter data; successful recovery to the same build |
+
+Chrome visibly verified Overview totals, `ap-south` filtering, payment rows, immature
+shipment labeling, the fresh publication status, the working skip target, and the
+critical payment incident with all 20 source-event evidence rows. Redis and PostgreSQL
+were restored healthy after the controlled failure checks. This is correctness evidence,
+not a throughput, availability or scalability benchmark.

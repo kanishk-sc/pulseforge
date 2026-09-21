@@ -36,8 +36,9 @@ with DAG(
     dbt_build = BashOperator(
         task_id="dbt_build",
         bash_command=(
-            f"dbt build --project-dir {DBT_PROJECT_DIR} "
-            f"--profiles-dir {DBT_PROFILES_DIR} --target dev"
+            "python -m pulseforge.product.cli pipeline "
+            "--build-key '{{ dag_run.run_id }}' "
+            f"--project-dir {DBT_PROJECT_DIR} --profiles-dir {DBT_PROFILES_DIR}"
         ),
     )
 

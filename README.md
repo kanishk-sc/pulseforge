@@ -7,11 +7,13 @@ to reliable operational decisions: preserve the original event, validate its con
 process it once at the sink, model the business, detect explainable anomalies, and
 show the evidence behind an incident.
 
-**Current milestone: Phase 3 — analytics engineering, verified locally.**
+**Current milestone: Phase 4 — operations product, verified locally.**
 Kafka ingestion, Spark Structured Streaming, raw/cleaned/curated Parquet, a dead-letter
 pipeline, an idempotent PostgreSQL sink, dbt analytics and finite Airflow orchestration
-are implemented. The dashboard, anomaly detection and AI assistant remain future work.
-All generated data is synthetic.
+are implemented. Successful analytics are atomically published to a versioned FastAPI
+surface, deterministic detectors persist evidence-backed incidents, and the React
+dashboard exposes the result. The AI assistant remains future work. All generated data
+is synthetic.
 
 See the [implementation checklist](docs/architecture/implementation-plan.md) and
 [actual verification record](docs/verification.md).
@@ -52,8 +54,12 @@ flowchart LR
     W --> M[Minute operational aggregates]
     W --> DBT[dbt facts / dimensions / marts]
     AF[Airflow finite batch orchestration] --> DBT
-    DBT -. Phase 4 .-> API[Metrics and incident APIs]
-    API -.-> UI[React operations dashboard]
+    DBT --> PUB[(Immutable successful publication)]
+    PUB --> DET[Deterministic detectors]
+    PUB --> API[Versioned metrics and status APIs]
+    DET --> INC[(Incidents and source evidence)]
+    INC --> API
+    API --> UI[React operations dashboard]
     RAG[Phase 6: evidence-based assistant] -.-> API
     RAG -.-> V[(pgvector runbooks)]
 ```
@@ -67,7 +73,7 @@ flowchart LR
 | API | FastAPI | Implemented: liveness, dependency readiness, OpenAPI, request IDs, JSON logs |
 | Streaming | Spark 4.0.1, PySpark, Kafka connector | Event-time deduplication, DLQ, checkpoint recovery and JDBC staging |
 | Modeling | dbt, Airflow | Implemented: documented facts/dimensions/marts, tests and finite hourly DAG |
-| Product | React, TypeScript, Redis | Phase 4 |
+| Product | React, TypeScript, Redis | Implemented: build-aware APIs, detectors, incidents and evidence UI |
 | Telemetry | Prometheus, Grafana, OpenTelemetry | Phase 5 |
 | Assistant | pgvector, provider abstraction | Phase 6, optional paid provider, offline support |
 | Deployment | Terraform, AWS ECS/RDS/ElastiCache/S3/ECR | Validated configuration; not applied or publicly deployed |
@@ -240,7 +246,8 @@ docker compose exec airflow cat /opt/airflow/state/simple_auth_manager_passwords
 Open http://localhost:8080 and sign in as `pulseforge` with the generated password.
 The password file is stored only in the ignored Airflow state volume; no default
 password is committed. The DAG's path is `verify_warehouse -> dbt_build ->
-quality_summary`. Trigger it in the UI, or perform a finite local verification with:
+quality_summary`. The middle task runs dbt, atomically publishes the successful build,
+then evaluates finite detectors. Trigger it in the UI, or verify the DAG with:
 
 ```sh
 docker compose --profile airflow run --rm --no-deps airflow python /opt/pulseforge/scripts/verify_airflow_dag.py
@@ -256,26 +263,30 @@ for model grains, metric denominators and failure/recovery behavior.
 ```sh
 curl http://localhost:8000/health
 curl -H "X-Request-ID: demo-001" http://localhost:8000/ready
-curl "http://localhost:8000/api/metrics/overview?hours=24"
-curl http://localhost:8000/api/pipeline/status
+curl "http://localhost:8000/api/v1/payment-health?start=2026-09-20T00:00:00Z&end=2026-09-21T00:00:00Z&region=ap-south"
+curl http://localhost:8000/api/v1/analytics/status
+curl "http://localhost:8000/api/v1/incidents?status=open"
 curl http://localhost:8000/metrics
 ```
 
 In PowerShell, use `curl.exe` or `Invoke-RestMethod`. `/health` reports process liveness;
 `/ready` checks a real PostgreSQL query, the Kafka event topic, and the S3 bucket. It
 returns HTTP 503 when a dependency is unavailable and never returns raw connection
-errors. Analytics responses are cached in Redis for 60 seconds by default. If Redis is
-unavailable, the API records that outcome and reads PostgreSQL directly; Redis is never
-the system of record. The overview endpoint reads the actual dbt revenue, payment,
-shipment, refund, operations and data-quality marts. An incident endpoint does not yet
-exist and is not claimed.
+errors. Product responses read only the newest successful immutable publication and
+include its build/freshness context. Decimal money and rates remain strings. Redis
+caches successful responses for 60 seconds by default; if unavailable, the API reads
+PostgreSQL directly. Running or failed builds never replace the last success, stale
+success is labeled, and no successful publication returns 503 rather than made-up data.
 
 ### Run the product and observability layers
 
-Build the marts first, then start the dashboard and monitoring profiles:
+Migrate the product schema, publish tested analytics, then start the dashboard:
 
 ```sh
-docker compose --profile product up -d --build dashboard
+docker compose --profile product run --rm --build product-migrate
+docker compose --profile airflow build airflow
+docker compose --profile airflow run --rm --no-deps airflow python -m pulseforge.product.cli pipeline --build-key local-product-build --project-dir /opt/pulseforge/analytics --profiles-dir /opt/pulseforge/analytics
+docker compose --profile product up -d --build --wait --wait-timeout 180 redis api dashboard
 docker compose --profile observability up -d prometheus grafana
 ```
 
@@ -284,6 +295,13 @@ states. Nginx serves the production bundle and proxies `/api` to FastAPI. Grafan
 the checked-in dashboard and Prometheus datasource automatically. Set
 `OTEL_EXPORTER_OTLP_ENDPOINT` only when an OTLP/HTTP collector is available; traces are
 otherwise disabled without affecting requests.
+
+To reproduce the detector acceptance scenario, run
+`uv run python scripts/seed_product_acceptance.py` before the pipeline command and pass
+its `detector_now` value with `--detector-now`. The fixture uses the existing replay-safe
+ingestion boundary and is idempotent within its evaluation hour. See the
+[Phase 4 design](docs/architecture/phase-4-design.md) for publication and detector
+semantics.
 
 ### Development and tests
 
@@ -294,6 +312,8 @@ uv run pytest -m "not integration" --basetemp=.pytest_cache/unit-tmp
 uv run pytest -m integration --run-integration --basetemp=.pytest_cache/integration-tmp
 uv run pytest --run-integration --run-streaming --basetemp=.pytest_cache/streaming-tmp
 uv run pytest -m analytics --run-integration --run-analytics --basetemp=.pytest_cache/analytics-tmp
+uv run pytest tests/test_product_integration.py --run-integration --run-product
+npm test -- --run --prefix frontend
 uv run pytest --run-integration --run-streaming --run-analytics --basetemp=.pytest_cache/full-tmp
 ```
 
@@ -305,8 +325,10 @@ outage/recovery. These tests intentionally stop/restart local services: run agai
 development stack, without another traffic generator. Integration tests skip by default.
 The analytics flag creates a disposable database with the exact Phase 2 schema, loads
 deterministic events through the real sink, runs dbt twice and checks exact facts,
-marts, lineage and replay stability. CI keeps the Python, streaming and analytics jobs
-independent and requires no private secrets. All three jobs passed in
+marts, lineage and replay stability. CI keeps Python, streaming, analytics and product
+integration jobs independent and requires no private secrets. The product job seeds an
+anomaly, runs the real publication pipeline, starts the API/dashboard and checks exact
+incident evidence. All Phase 3 jobs passed in
 [Phase 3 hosted CI](https://github.com/kanishk-sc/pulseforge/actions/runs/35117743583).
 
 For host API development, stop the container API first, then run:
@@ -365,13 +387,14 @@ security gaps and billable-resource warnings.
 ## Current status
 
 Implemented: event contracts and generation, Kafka/Spark processing, raw/cleaned lake,
-idempotent PostgreSQL sinks, dbt models/tests, Airflow orchestration, cached analytics
-API, React dashboard, API metrics/tracing hooks, Grafana provisioning, Compose and CI.
+idempotent PostgreSQL sinks, dbt models/tests, Airflow orchestration, immutable analytics
+publication, versioned cached APIs, deterministic incidents/evidence, React operations
+dashboard, API metrics/tracing hooks, Grafana provisioning, Compose and CI.
 
-In progress: deeper browser tests and Spark/Kafka-native monitoring.
+In progress: Spark/Kafka-native monitoring and incident-resolution workflows.
 
-Planned: explainable anomaly baselines, persisted incidents, retrieval-grounded
-operations assistance, load/failure experiments and any real cloud deployment.
+Planned: retrieval-grounded operations assistance, load/failure experiments and any
+real cloud deployment.
 
 ## Screenshots and benchmarks
 

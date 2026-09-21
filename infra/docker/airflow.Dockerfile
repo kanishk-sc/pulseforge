@@ -8,7 +8,8 @@ ARG DBT_POSTGRES_VERSION=1.11.0
 RUN pip install --no-cache-dir \
         "apache-airflow==${AIRFLOW_VERSION}" \
         "dbt-core==${DBT_CORE_VERSION}" \
-        "dbt-postgres==${DBT_POSTGRES_VERSION}"
+        "dbt-postgres==${DBT_POSTGRES_VERSION}" \
+        "psycopg[binary]>=3.2,<4"
 
 USER root
 RUN mkdir -p /opt/airflow/state \
@@ -18,7 +19,11 @@ USER airflow
 
 COPY --chown=airflow:root airflow/dags /opt/airflow/dags
 COPY --chown=airflow:root analytics /opt/pulseforge/analytics
+COPY --chown=airflow:root pyproject.toml /opt/pulseforge/pyproject.toml
+COPY --chown=airflow:root src /opt/pulseforge/src
 COPY --chown=airflow:root scripts/summarize_dbt_run.py /opt/pulseforge/scripts/summarize_dbt_run.py
 COPY --chown=airflow:root scripts/verify_airflow_dag.py /opt/pulseforge/scripts/verify_airflow_dag.py
+
+RUN pip install --no-cache-dir --no-deps /opt/pulseforge
 
 ENV DBT_PROFILES_DIR=/opt/pulseforge/analytics

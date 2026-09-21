@@ -16,6 +16,7 @@ x-app: &app
     MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Run scripts/init_env.py first}
     REDIS_URL: redis://redis:6379/0
     ANALYTICS_CACHE_TTL_SECONDS: ${ANALYTICS_CACHE_TTL_SECONDS:-60}
+    ANALYTICS_STALE_AFTER_SECONDS: ${ANALYTICS_STALE_AFTER_SECONDS:-7200}
     OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
   init: true
 
@@ -218,6 +219,22 @@ services:
     depends_on:
       api: {condition: service_healthy}
     restart: unless-stopped
+
+  product-migrate:
+    <<: *app
+    profiles: ["product"]
+    command: python -m pulseforge.product.cli migrate
+    depends_on:
+      postgres: {condition: service_healthy}
+    restart: "no"
+
+  detector:
+    <<: *app
+    profiles: ["product"]
+    command: python -m pulseforge.product.cli detect
+    depends_on:
+      product-migrate: {condition: service_completed_successfully}
+    restart: "no"
 
   prometheus:
     image: prom/prometheus:v3.5.0
