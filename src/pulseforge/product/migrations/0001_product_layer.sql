@@ -118,4 +118,3 @@ CREATE TABLE IF NOT EXISTS product.incident_evidence (
     event_ts timestamptz NOT NULL,
     PRIMARY KEY (incident_id, source_event_id, evidence_role)
 );
-
