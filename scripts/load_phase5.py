@@ -80,6 +80,16 @@ def warehouse_rows() -> int:
         return connection.execute("SELECT count(*) FROM stream_events").fetchone()[0]
 
 
+def producer_environment(rate: float, seed: int) -> dict[str, str]:
+    environment = os.environ.copy()
+    environment["EVENTS_PER_SECOND"] = str(rate)
+    environment["GENERATOR_SEED"] = str(seed)
+    # The clean ingestion measurement expects one unique warehouse row per send.
+    # Contract-rejection and duplicate behavior have separate integration tests.
+    environment["ANOMALY_RATE"] = "0"
+    return environment
+
+
 async def api_load(args) -> dict:
     end = datetime.now(UTC).replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
     start = end - timedelta(days=1)
@@ -146,9 +156,7 @@ async def api_load(args) -> dict:
 def ingestion_load(args) -> dict:
     before = warehouse_rows()
     seed = random.SystemRandom().randint(1, 2**31 - 1)
-    environment = os.environ.copy()
-    environment["EVENTS_PER_SECOND"] = str(args.rate)
-    environment["GENERATOR_SEED"] = str(seed)
+    environment = producer_environment(args.rate, seed)
     began = time.monotonic()
     result = subprocess.run(
         [sys.executable, "-m", "pulseforge.producer", "--count", str(args.events)],
@@ -171,7 +179,12 @@ def ingestion_load(args) -> dict:
         after = warehouse_rows()
     return {
         "scenario": "ingestion",
-        "configuration": {"events": args.events, "rate_events_per_second": args.rate, "seed": seed},
+        "configuration": {
+            "events": args.events,
+            "rate_events_per_second": args.rate,
+            "seed": seed,
+            "anomaly_rate": 0,
+        },
         "measured": {
             "producer_wall_seconds": round(producer_finished - began, 3),
             "warehouse_rows_before": before,
@@ -223,6 +236,8 @@ def main() -> None:
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(output, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({"scenario": args.scenario, "measured": outcome["measured"]}))
+    if args.scenario == "ingestion" and not outcome["measured"]["all_events_observed"]:
+        raise SystemExit("ingestion drain incomplete; inspect the JSON artifact")
 
 
 if __name__ == "__main__":
