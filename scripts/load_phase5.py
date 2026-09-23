@@ -18,6 +18,7 @@ import httpx
 import psycopg
 
 from pulseforge.config import Settings
+from pulseforge.generator import EventGenerator
 
 
 def percentile(values: list[float], rank: float) -> float | None:
@@ -78,6 +79,27 @@ def warehouse_rows() -> int:
         connect_timeout=3,
     ) as connection:
         return connection.execute("SELECT count(*) FROM stream_events").fetchone()[0]
+
+
+def expected_event_ids(seed: int, count: int) -> list[str]:
+    generator = EventGenerator(seed=seed, scenario="normal", anomaly_rate=0)
+    return [json.loads(generator.next_record()[1])["event_id"] for _ in range(count)]
+
+
+def warehouse_rows_for_event_ids(event_ids: list[str]) -> int:
+    settings = Settings()
+    with psycopg.connect(
+        host=settings.postgres_host,
+        port=settings.postgres_port,
+        dbname=settings.postgres_db,
+        user=settings.postgres_user,
+        password=settings.postgres_password.get_secret_value(),
+        connect_timeout=3,
+    ) as connection:
+        return connection.execute(
+            "SELECT count(*) FROM stream_events WHERE event_id = ANY(%s::uuid[])",
+            (event_ids,),
+        ).fetchone()[0]
 
 
 def producer_environment(rate: float, seed: int) -> dict[str, str]:
@@ -156,6 +178,9 @@ async def api_load(args) -> dict:
 def ingestion_load(args) -> dict:
     before = warehouse_rows()
     seed = random.SystemRandom().randint(1, 2**31 - 1)
+    event_ids = expected_event_ids(seed, args.events)
+    if warehouse_rows_for_event_ids(event_ids):
+        raise RuntimeError("generated event IDs already exist in the warehouse")
     environment = producer_environment(args.rate, seed)
     began = time.monotonic()
     result = subprocess.run(
@@ -173,10 +198,11 @@ def ingestion_load(args) -> dict:
             f"stderr_tail={result.stderr[-500:]}"
         )
     deadline = time.monotonic() + 90
-    after = warehouse_rows()
-    while after < before + args.events and time.monotonic() < deadline:
+    observed = warehouse_rows_for_event_ids(event_ids)
+    while observed < args.events and time.monotonic() < deadline:
         time.sleep(2)
-        after = warehouse_rows()
+        observed = warehouse_rows_for_event_ids(event_ids)
+    after = warehouse_rows()
     return {
         "scenario": "ingestion",
         "configuration": {
@@ -190,14 +216,16 @@ def ingestion_load(args) -> dict:
             "warehouse_rows_before": before,
             "warehouse_rows_after": after,
             "new_committed_rows": after - before,
+            "matching_run_event_rows": observed,
             "producer_end_to_warehouse_observation_seconds": round(
                 time.monotonic() - producer_finished, 3
             ),
-            "all_events_observed": after >= before + args.events,
+            "all_events_observed": observed == args.events,
         },
         "interpretation": (
-            "Drain observation includes two-second polling and is not per-event processing "
-            "latency. Event-time delay is not measured."
+            "Acceptance checks this run's deterministic event IDs; the warehouse-wide row "
+            "delta can include other traffic. Drain observation includes two-second polling "
+            "and is not per-event processing latency. Event-time delay is not measured."
         ),
     }
 
