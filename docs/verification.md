@@ -620,6 +620,9 @@ only `raw`, `dlq` and `valid-events` determine streaming health. The incident ga
 now counts authoritative `product.incidents` rows because a best-effort detector-run
 update can fail after incident commit. HTTP method and Spark termination metric labels
 are bounded. Focused regressions cover each finding. No volume or checkpoint was removed.
+The ingestion load harness also previously accepted a warehouse-wide row increase as
+proof that its own records arrived; it now checks generated event IDs directly and has
+been rerun with 100 clean events. The older count-delta artifact remains historical.
 
 The commands below ran against the review worktree. Isolated Python commands used
 `$env:UV_LINK_MODE='copy'` because the Windows development environment was in use.
@@ -628,7 +631,7 @@ The commands below ran against the review worktree. Isolated Python commands use
 | --- | --- |
 | `uv run --isolated ruff format --check .`; `uv run --isolated ruff check .` | Both passed after the review edits. |
 | `uv lock --check` | 69 packages resolved; lock current. |
-| `uv run --isolated pytest -q -m 'not integration and not spark' --basetemp .pytest_cache/pr5-review-unit-final2` | 105 passed, 32 deselected; two upstream deprecation warnings. |
+| `uv run --isolated pytest -q -m 'not integration and not spark' --basetemp .pytest_cache/pr5-review-unit-final3` | 107 passed, 32 deselected; two upstream deprecation warnings. |
 | `uv run --isolated pytest -q -m integration --run-integration --run-streaming --basetemp .pytest_cache/pr5-review-streaming` | 15 passed, 10 skipped, 110 deselected in 245.68 s; replay, checkpoint and sink recovery coverage retained. |
 | `uv run --isolated pytest -q -m analytics --run-integration --run-analytics --basetemp .pytest_cache/pr5-review-analytics` | 4 passed, 132 deselected in 96.72 s. |
 | `uv run --isolated pytest -q tests/test_product_integration.py --run-integration --run-product --basetemp .pytest_cache/pr5-review-product` | 6 passed against populated PostgreSQL and live API, including authoritative incident metric. |
@@ -637,11 +640,12 @@ The commands below ran against the review worktree. Isolated Python commands use
 | `docker compose --profile analytics run --rm analytics-dbt test` | 94 data tests plus one hook: PASS=95, WARN=0, ERROR=0, SKIP=0. |
 | `docker compose --profile airflow run --rm --no-deps airflow python /opt/pulseforge/scripts/verify_airflow_dag.py` | Zero import errors; only `verify_warehouse`, `dbt_build`, `quality_summary` finite tasks. |
 | `docker compose --profile observability config --quiet`; `docker compose exec -T prometheus promtool check config /etc/prometheus/prometheus.yml`; `docker compose exec -T prometheus promtool test rules /etc/prometheus/alert-tests.yml` | Compose valid; one rule file with seven rules; deterministic alert tests succeeded. |
-| `uv run --isolated python scripts/verify_observability.py` after rebuilding with `OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318` | API/ops/streaming targets up, 815 committed rows at final check, four dashboards provisioned (6/7/6/5 panels), sampled trace in Tempo with PostgreSQL and Redis spans. The first attempt without the documented OTLP setting failed for missing trace IDs and was not counted as a pass. |
+| `uv run --isolated python scripts/verify_observability.py` after rebuilding with `OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318` | API/ops/streaming targets up, 815 committed rows at that check, four dashboards provisioned (6/7/6/5 panels), sampled trace in Tempo with PostgreSQL and Redis spans. The first attempt without the documented OTLP setting failed for missing trace IDs and was not counted as a pass. |
 | `uv run --isolated python scripts/load_phase5.py --scenario warm --requests 5 --concurrency 2 --request-rate 5 --output .pytest_cache/pr5-warm-smoke.json` | 5/5 HTTP 200 and cache hits, zero errors, exit 0; 0.811 s local smoke, not a new benchmark. |
 | `uv run --isolated python scripts/load_phase5.py --scenario fallback --requests 3 --concurrency 1 --request-rate 3 --output .pytest_cache/pr5-failure-smoke.json` while Redis was available | 3/3 HTTP 200 but zero bypasses; scenario condition false, JSON preserved, exit 1. |
+| `uv run --isolated python scripts/load_phase5.py --scenario ingestion --events 100 --rate 10 --output docs/benchmarks/phase5-ingestion-reviewed.json` | On clean harness commit `0ef5255`, 100/100 expected event IDs found; warehouse 818→918, producer 27.359 s, 16.234 s producer-exit-to-observation, exit 0. This is a local drain observation, not per-event latency. |
 
-After the final image refresh, a real browser opened all four Grafana dashboards;
+After the review image refresh, a real browser opened all four Grafana dashboards;
 expected panels loaded with no displayed query errors. Controlled drills stopped the
 OTLP collector (five API `/health` responses stayed HTTP 200) and Redis (product HTTP
 200 with `X-Cache: bypass`); both were restored healthy in `finally` blocks. The
