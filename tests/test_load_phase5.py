@@ -23,3 +23,15 @@ def test_clean_ingestion_environment_overrides_default_anomaly_rate(monkeypatch)
     assert environment["EVENTS_PER_SECOND"] == "10"
     assert environment["GENERATOR_SEED"] == "123"
     assert environment["ANOMALY_RATE"] == "0"
+
+
+def test_scenario_acceptance_rejects_partial_results():
+    acceptance_ok = load_module().acceptance_ok
+    assert acceptance_ok(
+        {"scenario": "warm", "measured": {"error_count": 0, "scenario_condition_met": True}}
+    )
+    assert not acceptance_ok(
+        {"scenario": "fallback", "measured": {"error_count": 6, "scenario_condition_met": False}}
+    )
+    assert acceptance_ok({"scenario": "ingestion", "measured": {"all_events_observed": True}})
+    assert not acceptance_ok({"scenario": "ingestion", "measured": {"all_events_observed": False}})

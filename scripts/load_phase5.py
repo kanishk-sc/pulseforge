@@ -202,6 +202,13 @@ def ingestion_load(args) -> dict:
     }
 
 
+def acceptance_ok(outcome: dict) -> bool:
+    measured = outcome["measured"]
+    if outcome["scenario"] == "ingestion":
+        return measured["all_events_observed"]
+    return measured["error_count"] == 0 and measured["scenario_condition_met"]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -236,8 +243,8 @@ def main() -> None:
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(output, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({"scenario": args.scenario, "measured": outcome["measured"]}))
-    if args.scenario == "ingestion" and not outcome["measured"]["all_events_observed"]:
-        raise SystemExit("ingestion drain incomplete; inspect the JSON artifact")
+    if not acceptance_ok(outcome):
+        raise SystemExit("scenario acceptance failed; inspect the JSON artifact")
 
 
 if __name__ == "__main__":
