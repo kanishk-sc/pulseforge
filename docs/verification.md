@@ -556,6 +556,16 @@ record their actual commit SHAs and include one interrupted fallback attempt. Ho
 CI is specified in `.github/workflows/ci.yml`; its final result must be checked on
 the PR's exact head rather than inferred from these local runs.
 
+## Hosted CI evidence
+
+The first PR-triggered [Platform CI run](https://github.com/kanishk-sc/pulseforge/actions/runs/35899378028)
+completed successfully on commit `9fa48be03e3f4b6cf0cd400c59b9cee2ef2ade66`:
+`python`, `compose-integration`, `analytics-integration` and
+`product-integration` all concluded `success`. A push-triggered run
+`35899170773` on the same SHA also completed successfully. The PR's final head must
+still be checked after this evidence-only documentation commit; those live results
+are shown on [PR #5](https://github.com/kanishk-sc/pulseforge/pull/5).
+
 | Exact local command | Observed result |
 | --- | --- |
 | `$env:UV_LINK_MODE='copy'; uv run --isolated ruff format --check .` | 86 files already formatted after final harness edits |
