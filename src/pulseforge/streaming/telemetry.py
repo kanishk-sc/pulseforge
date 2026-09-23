@@ -55,7 +55,7 @@ SINK_FAILURES = Counter(
 )
 QUERY_FAILURES = Counter(
     "pulseforge_stream_query_failures_total",
-    "Critical streaming query terminations with an exception",
+    "Streaming query terminations with an exception, including optional diagnostics",
     ("query",),
 )
 

@@ -10,6 +10,10 @@ from pulseforge.config import Settings
 from pulseforge.logging import configure_logging
 
 
+def durable_incident_count(connection: psycopg.Connection) -> int:
+    return connection.execute("SELECT count(*) FROM product.incidents").fetchone()[0]
+
+
 class OperationalCollector:
     def __init__(self, settings: Settings):
         self.settings = settings
@@ -154,9 +158,7 @@ class OperationalCollector:
                 evaluations.add_metric([status, reason], count)
             yield evaluations
             detector = connection.execute(
-                """SELECT extract(epoch from max(completed_at)),
-                          coalesce(sum(created_incidents),0)
-                   FROM product.detector_runs"""
+                "SELECT extract(epoch from max(completed_at)) FROM product.detector_runs"
             ).fetchone()
             if detector[0] is not None:
                 yield GaugeMetricFamily(
@@ -166,8 +168,8 @@ class OperationalCollector:
                 )
             yield GaugeMetricFamily(
                 "pulseforge_detector_incidents_created",
-                "Durable new incidents reported by detector attempts",
-                value=detector[1],
+                "Durable detector-created incident rows, including older evaluations",
+                value=durable_incident_count(connection),
             )
             duration = connection.execute(
                 """SELECT extract(epoch from completed_at-started_at)

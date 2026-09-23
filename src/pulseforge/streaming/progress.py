@@ -26,7 +26,7 @@ class ProgressLogger(StreamingQueryListener):
         self._names: dict[str, str] = {}
 
     def onQueryStarted(self, event) -> None:
-        self._names[str(event.id)] = event.name
+        self._names[str(event.id)] = event.name if event.name in QUERY_NAMES else "other"
         logger.info("query_started query=%s id=%s", event.name, event.id)
 
     def onQueryProgress(self, event) -> None:

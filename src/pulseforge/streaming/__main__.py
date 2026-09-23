@@ -7,13 +7,20 @@ from pathlib import Path
 from pulseforge.logging import configure_logging
 from pulseforge.streaming.config import StreamSettings
 from pulseforge.streaming.progress import ProgressLogger
-from pulseforge.streaming.queries import start_queries
+from pulseforge.streaming.queries import CRITICAL_QUERY_NAMES, start_queries
 from pulseforge.streaming.runtime import spark_session
 from pulseforge.streaming.telemetry import start_metrics_server
 from pulseforge.streaming.warehouse import connect, initialize_schema
 
 logger = logging.getLogger(__name__)
 HEALTH_FILE = Path("/tmp/pulseforge-streaming-health.json")
+
+
+def terminated_critical_query(queries) -> str | None:
+    for query in queries:
+        if query.name in CRITICAL_QUERY_NAMES and not query.isActive:
+            return query.name
+    return None
 
 
 def main() -> None:
@@ -35,10 +42,12 @@ def main() -> None:
     try:
         queries = start_queries(spark, settings)
         while not stop.wait(1):
-            for query in queries:
-                if not query.isActive:
-                    raise RuntimeError(f"Critical streaming query terminated: {query.name}")
-            HEALTH_FILE.write_text(json.dumps({"queries": [q.name for q in queries]}))
+            terminated = terminated_critical_query(queries)
+            if terminated is not None:
+                raise RuntimeError(f"Critical streaming query terminated: {terminated}")
+            HEALTH_FILE.write_text(
+                json.dumps({"queries": [q.name for q in queries if q.name in CRITICAL_QUERY_NAMES]})
+            )
     finally:
         HEALTH_FILE.unlink(missing_ok=True)
         for query in queries:

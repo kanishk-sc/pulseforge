@@ -14,8 +14,11 @@ from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError
 
 from pulseforge.api import create_app
 from pulseforge.logging import JsonFormatter
+from pulseforge.ops_exporter import durable_incident_count
 from pulseforge.product.operational_runs import record_dbt_quality
+from pulseforge.streaming.__main__ import terminated_critical_query
 from pulseforge.streaming.progress import ProgressLogger
+from pulseforge.streaming.queries import start_validation_telemetry
 from pulseforge.telemetry import failure_reason
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -32,9 +35,12 @@ def test_request_metrics_use_route_template_and_bounded_status_class():
     with TestClient(create_app()) as client:
         client.get("/health?customer_id=private")
         client.get("/not-a-real-route/secret-value")
+        client.request("CUSTOMVERB", "/not-a-real-route")
         metrics = client.get("/metrics").text
     assert 'route="/health",status_class="2xx"' in metrics
     assert 'route="unmatched",status_class="4xx"' in metrics
+    assert 'method="OTHER",route="unmatched",status_class="4xx"' in metrics
+    assert "CUSTOMVERB" not in metrics
     assert "private" not in metrics
     assert "secret-value" not in metrics
     assert "customer_id" not in metrics
@@ -121,6 +127,53 @@ def test_broken_stream_metric_does_not_fail_progress_callback(monkeypatch):
     )
 
 
+def test_diagnostic_query_failure_does_not_stop_critical_ingestion():
+    queries = [
+        SimpleNamespace(name="raw", isActive=True),
+        SimpleNamespace(name="dlq", isActive=True),
+        SimpleNamespace(name="valid-events", isActive=True),
+        SimpleNamespace(name="validation-counts", isActive=False),
+    ]
+    assert terminated_critical_query(queries) is None
+    queries[2].isActive = False
+    assert terminated_critical_query(queries) == "valid-events"
+
+
+def test_diagnostic_query_start_failure_is_best_effort():
+    class FailedWriter:
+        def foreachBatch(self, _callback):
+            return self
+
+        def option(self, *_args):
+            return self
+
+        def queryName(self, _name):
+            return self
+
+        def trigger(self, **_kwargs):
+            return self
+
+        def start(self):
+            raise RuntimeError("diagnostic checkpoint unavailable")
+
+    invalid = SimpleNamespace(writeStream=FailedWriter())
+    settings = SimpleNamespace(
+        checkpoint=lambda _name: "s3a://diagnostics", stream_trigger="5 seconds"
+    )
+    assert start_validation_telemetry(invalid, settings) is None
+
+
+def test_terminated_query_metric_bounds_unknown_query_name():
+    from pulseforge.streaming.telemetry import QUERY_FAILURES
+
+    listener = ProgressLogger()
+    listener.onQueryStarted(SimpleNamespace(id="unknown-id", name="untrusted-query-name"))
+    before = QUERY_FAILURES.labels("other")._value.get()
+    listener.onQueryTerminated(SimpleNamespace(id="unknown-id", exception="failed"))
+    assert QUERY_FAILURES.labels("other")._value.get() == before + 1
+    assert "untrusted-query-name" not in generate_latest().decode()
+
+
 def test_failed_quality_telemetry_is_best_effort(tmp_path):
     artifact = tmp_path / "run_results.json"
     artifact.write_text('{"results": []}', encoding="utf-8")
@@ -138,6 +191,15 @@ def test_failed_quality_telemetry_is_best_effort(tmp_path):
     connection = Connection()
     record_dbt_quality(connection, uuid4(), artifact)
     assert connection.rollback_count == 1
+
+
+def test_incident_gauge_uses_business_rows_not_best_effort_run_counts():
+    class Connection:
+        def execute(self, query):
+            assert query == "SELECT count(*) FROM product.incidents"
+            return SimpleNamespace(fetchone=lambda: (2,))
+
+    assert durable_incident_count(Connection()) == 2
 
 
 def test_structured_log_does_not_format_exception_or_secret_text():

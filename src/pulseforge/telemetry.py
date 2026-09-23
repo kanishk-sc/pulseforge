@@ -19,6 +19,7 @@ from pulseforge.config import Settings
 
 logger = logging.getLogger(__name__)
 _metric_failure_logged = False
+HTTP_METHODS = frozenset({"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"})
 
 HTTP_REQUESTS = Counter(
     "pulseforge_http_requests_total",
@@ -102,10 +103,9 @@ async def observe_request(
         if route_path != "/metrics":
             try:
                 status_class = f"{min(response_status // 100, 5)}xx"
-                record_counter(HTTP_REQUESTS, request.method, route_path, status_class)
-                HTTP_DURATION.labels(request.method, route_path).observe(
-                    time.perf_counter() - started
-                )
+                method = request.method if request.method in HTTP_METHODS else "OTHER"
+                record_counter(HTTP_REQUESTS, method, route_path, status_class)
+                HTTP_DURATION.labels(method, route_path).observe(time.perf_counter() - started)
             except Exception:
                 # A diagnostic exporter must never replace the business response.
                 pass

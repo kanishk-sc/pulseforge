@@ -4,8 +4,11 @@ from uuid import uuid4
 import httpx
 import psycopg
 import pytest
+from prometheus_client import generate_latest
 from psycopg.rows import dict_row, tuple_row
 
+from pulseforge.config import Settings
+from pulseforge.ops_exporter import create_registry
 from pulseforge.product.operational_runs import recorded_evaluate
 from pulseforge.product.publication import begin_build, fail_build
 from pulseforge.streaming.config import StreamSettings
@@ -112,6 +115,13 @@ def test_finite_job_telemetry_records_quality_and_stale_detector_skip():
             "skip_reason": "stale_publication",
             "created_incidents": 0,
         }
+
+
+def test_incident_metric_reads_authoritative_incident_rows():
+    with connect() as connection:
+        expected = connection.execute("SELECT count(*) FROM product.incidents").fetchone()["count"]
+    metrics = generate_latest(create_registry(Settings())).decode()
+    assert f"pulseforge_detector_incidents_created {expected}.0" in metrics
 
 
 def test_failed_build_never_replaces_latest_successful_publication():

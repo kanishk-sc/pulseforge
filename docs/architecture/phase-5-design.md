@@ -25,8 +25,8 @@ zero or healthy. Scrape `up=0` means only that Prometheus cannot collect the tar
 
 | Signal | Source and meaning | Type / units | Bounded labels | Reset, freshness and authority |
 | --- | --- | --- | --- | --- |
-| `pulseforge_http_requests_total` | Completed FastAPI requests | counter / requests | method, route template, `2xx`/`3xx`/`4xx`/`5xx` | Resets with API; diagnostic traffic, excludes `/metrics` |
-| `pulseforge_http_request_duration_seconds` | Wall time of API handling | histogram / seconds | method, route template | Resets with API; diagnostic, not end-to-end latency |
+| `pulseforge_http_requests_total` | Completed FastAPI requests | counter / requests | standard method or `OTHER`, route template, `2xx`/`3xx`/`4xx`/`5xx` | Resets with API; diagnostic traffic, excludes `/metrics` |
+| `pulseforge_http_request_duration_seconds` | Wall time of API handling | histogram / seconds | standard method or `OTHER`, route template | Resets with API; diagnostic, not end-to-end latency |
 | `pulseforge_dependency_failures_total` | Failed readiness, warehouse or cache operation | counter / operations | `postgres`/`kafka`/`s3`/`redis`, `error`/`timeout` | Resets with API; diagnostic; absence is not proof of availability |
 | `pulseforge_cache_operations_total` | Redis read/write outcome including fallback | counter / operations | `get`/`set`, `hit`/`miss`/`stored`/`error`/`timeout` | Resets with API; diagnostic; misses and bypasses do not change business data |
 | `pulseforge_producer_deliveries_total` | Kafka acknowledged sends or failed send attempts | counter / attempts | `confirmed`/`failed` | Resets with producer; process must be running to scrape; confirmed sends are not warehouse inserts |
@@ -51,7 +51,7 @@ zero or healthy. Scrape `up=0` means only that Prometheus cannot collect the tar
 | `pulseforge_analytics_publication_present`, `pulseforge_analytics_source_event_count` | Whether a success exists and frozen source size | gauges / boolean, events | none | Recomputed per scrape; publication presence alone does not establish freshness |
 | `pulseforge_detector_evaluations` | Durable finite detector invocations | gauge / runs | `succeeded`/`skipped`/`failed`, bounded skip reason | Recomputed per scrape; attempts, including retries, remain visible |
 | `pulseforge_detector_last_evaluation_timestamp_seconds` | Last finished detector invocation | gauge / epoch seconds | none | Absent until a run; recency is separate from success |
-| `pulseforge_detector_incidents_created` | Sum of durable new incidents reported by evaluations | gauge / incidents | none | Recomputed per scrape; actual idempotent inserts, not candidate counts |
+| `pulseforge_detector_incidents_created` | Count of durable rows in `product.incidents` | gauge / incidents | none | Recomputed per scrape; includes earlier evaluations and remains correct if best-effort run telemetry fails |
 | `pulseforge_detector_last_duration_seconds` | Last finished evaluation duration | gauge / seconds | none | Missing until a completed run; latest outcome must be checked separately |
 
 The finite job exporter must fail the scrape when PostgreSQL is unavailable. It never
@@ -61,6 +61,9 @@ Spark exposes offsets from its raw query's `endOffset`; it does not establish a 
 consumer group or expose an independently sampled Kafka log end offset. The dashboard
 therefore says **processed offset**, never committed consumer lag. Warehouse row counts
 are read from PostgreSQL, where deduplication and checkpoint retries have resolved.
+The validation-count query has its own checkpoint but is optional: failure to start or
+later termination loses only that diagnostic. The raw, DLQ and valid-event queries
+remain the supervisor's critical set and continue to own business progress.
 
 ## Trace contract
 
