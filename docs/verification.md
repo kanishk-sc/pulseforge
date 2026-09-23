@@ -546,3 +546,57 @@ shipment labeling, the fresh publication status, the working skip target, and th
 critical payment incident with all 20 source-event evidence rows. Redis and PostgreSQL
 were restored healthy after the controlled failure checks. This is correctness evidence,
 not a throughput, availability or scalability benchmark.
+
+# Phase 5 local observability and reliability acceptance — 2026-09-23
+
+Source instrumentation and optional-stack implementation were committed at `fa50790`;
+two focused harness corrections followed at `f0efa47` (clean ingestion) and `a9e2fa6`
+(failed-scenario exit status). The raw [bounded measurements](benchmarks/phase5-report.md)
+record their actual commit SHAs and include one interrupted fallback attempt. Hosted
+CI is specified in `.github/workflows/ci.yml`; its final result must be checked on
+the PR's exact head rather than inferred from these local runs.
+
+| Exact local command | Observed result |
+| --- | --- |
+| `$env:UV_LINK_MODE='copy'; uv run --isolated ruff format --check .` | 86 files already formatted after final harness edits |
+| `$env:UV_LINK_MODE='copy'; uv run --isolated ruff check .` | All checks passed after final implementation edits |
+| `uv lock --check` | Resolved 69 packages; lock current |
+| `$env:UV_LINK_MODE='copy'; uv run --isolated pytest -q -m 'not integration and not spark' --basetemp .pytest_cache/phase5-final-unit2` | 101 passed, 31 deselected; two upstream deprecation warnings after final harness edits. The focused load-harness check was also 3 passed. |
+| `npm test -- --run` (in `frontend`) | 5 passed in two files |
+| `npm run typecheck` (in `frontend`) | Exit 0 |
+| `npm run build` (in `frontend`) | Exit 0; Vite production bundle built |
+| `docker compose --profile observability config --quiet` | Valid Compose configuration; observability services opt in |
+| `docker compose exec -T prometheus promtool check config /etc/prometheus/prometheus.yml` | Valid configuration, one rule file, seven rules |
+| `docker compose exec -T prometheus promtool test rules /etc/prometheus/alert-tests.yml` | SUCCESS, including low-volume API suppression, active-versus-idle stream, missing targets and idle-versus-unpublished analytics |
+| `$env:UV_LINK_MODE='copy'; uv run --isolated python scripts/verify_observability.py` | Live API and ops targets up; 595 committed rows at that check; four Grafana dashboards with 6/7/6/5 panels; sampled `GET /api/v1/revenue` trace found in Tempo with PostgreSQL and Redis child spans. An initial single-request version failed under the default 10% sampler; the bounded sampling-aware verifier passed after correction. |
+| `docker compose --profile airflow run --rm --build --no-deps airflow python -m pulseforge.product.cli pipeline --build-key phase5-observability-local-20260923a --project-dir /opt/pulseforge/analytics --profiles-dir /opt/pulseforge/analytics` | dbt `PASS=109 WARN=0 ERROR=0 SKIP=0`; published build `164835e2-cb95-4f4d-b962-4d902d970c9e`; quality records 94 pass and 15 success, detector run succeeded with zero new incidents |
+| `docker compose --profile airflow run --rm --no-deps airflow python /opt/pulseforge/scripts/verify_airflow_dag.py` | Zero import errors; only three finite Airflow tasks, no Spark control |
+| `$env:UV_LINK_MODE='copy'; uv run --isolated pytest -q tests/test_product_integration.py --run-integration --run-product --basetemp .pytest_cache/phase5-final-product` | 5 passed against populated PostgreSQL and live API |
+| `$env:UV_LINK_MODE='copy'; uv run --isolated pytest -q -m analytics --run-integration --run-analytics --basetemp .pytest_cache/phase5-analytics` | 4 passed in 120.06 s |
+| `$env:UV_LINK_MODE='copy'; uv run --isolated pytest -q -m integration --run-integration --run-streaming --basetemp .pytest_cache/phase5-streaming-final --junitxml=phase5-streaming-final-results.xml` | 15 passed, 9 skipped, 100 deselected in 257.65 s; includes replay, watermark, checkpoint restart and PostgreSQL sink recovery |
+| `git diff --check` | No whitespace errors after implementation and harness corrections |
+
+The optional stack was rebuilt with the current API and streaming images. Live
+Prometheus scraped API/warehouse/Spark signals; the producer scrape was separately
+observed while its optional process ran, with 39 confirmed deliveries. Grafana's API,
+streaming, analytics and detector dashboards were opened in a real browser and showed
+the expected live or explicitly missing series. This is visual acceptance of the local
+operations UI, not a pixel-regression or browser-load result.
+
+Controlled local drills (each stopped service was restored): collector loss left
+`/health` 200 for ten requests; Prometheus/Grafana loss left health and product data
+available; PostgreSQL loss left `/health` 200 but made `/ready` and the product API
+return controlled 503, followed by recovery to 200. Redis loss produced `X-Cache:
+bypass` with PostgreSQL-backed 200 responses; the successful bounded repeat was 50/50
+after a separate interrupted attempt documented in the benchmark report. A streaming
+restart preserved the existing 522 committed rows and checkpoint recovery coverage;
+an intentional dbt failure under build key `phase5-intentional-failure-20260923a`
+recorded a failed attempt while `/api/v1/analytics/status` still named successful
+publication `164835e2-cb95-4f4d-b962-4d902d970c9e`.
+
+Limitations: the local Tempo named volume currently requires the container to run as
+root and has a 48-hour time retention without a hard byte cap; this is not a production
+security or capacity posture. Spark offsets are processed offsets, not committed Kafka
+consumer lag. The tests do not claim a cross-Kafka-to-browser trace, a production SLO,
+or a multi-node recovery drill. Publications predating migration `0004` lack durable
+dbt quality artifacts. No Phase 6 work is included.

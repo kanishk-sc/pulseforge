@@ -1,0 +1,300 @@
+{
+  "measured_at_utc": "2026-09-23T17:44:35.875472+00:00",
+  "hardware": {
+    "platform": "Windows-11-10.0.26200-SP0",
+    "logical_cpus": 16
+  },
+  "environment": {
+    "git_commit": "f0efa47b3dea38f6bd3b99cfff6d486dafe57ea7",
+    "working_tree_clean": false,
+    "python_version": "3.12.13",
+    "docker_server_version": "29.5.2",
+    "docker_logical_cpus": 16,
+    "docker_memory_bytes": 12155170816,
+    "warehouse_rows_at_start": 693
+  },
+  "docker_stats_before": [
+    {
+      "BlockIO": "7.93MB / 8.19kB",
+      "CPUPerc": "0.00%",
+      "Container": "4503364ed9974186984503d651d7642a4507038d06985fa52a89973524a8acfe",
+      "ID": "4503364ed997",
+      "MemPerc": "0.12%",
+      "MemUsage": "14.23MiB / 11.32GiB",
+      "Name": "pulseforge-dashboard-1",
+      "NetIO": "2.68kB / 126B",
+      "PIDs": "17"
+    },
+    {
+      "BlockIO": "832MB / 636MB",
+      "CPUPerc": "0.93%",
+      "Container": "7bc9f74cefb8a55dd1ac12b47c736f0f7c572855ceef1c3235743034e4e77d0a",
+      "ID": "7bc9f74cefb8",
+      "MemPerc": "54.45%",
+      "MemUsage": "1.634GiB / 3GiB",
+      "Name": "pulseforge-streaming-1",
+      "NetIO": "44.6MB / 18.4MB",
+      "PIDs": "350"
+    },
+    {
+      "BlockIO": "8.84MB / 0B",
+      "CPUPerc": "0.27%",
+      "Container": "c4bb95fef69216ef609532d2263dd73036ee9838312a183aba874677c1ea9ee0",
+      "ID": "c4bb95fef692",
+      "MemPerc": "0.73%",
+      "MemUsage": "84.68MiB / 11.32GiB",
+      "Name": "pulseforge-api-1",
+      "NetIO": "933kB / 2.25MB",
+      "PIDs": "7"
+    },
+    {
+      "BlockIO": "48.4MB / 0B",
+      "CPUPerc": "0.03%",
+      "Container": "b5222d0dc2ef0941709854e06ee1f4f82ade97bf210274c1e8d69866dca5a775",
+      "ID": "b5222d0dc2ef",
+      "MemPerc": "28.02%",
+      "MemUsage": "71.73MiB / 256MiB",
+      "Name": "pulseforge-ops-exporter-1",
+      "NetIO": "239kB / 430kB",
+      "PIDs": "2"
+    },
+    {
+      "BlockIO": "137MB / 1.47MB",
+      "CPUPerc": "0.00%",
+      "Container": "168ad6e0dcedb40f9b762bf7c540c38049a849de7baca987e0066c9dffa7cc5d",
+      "ID": "168ad6e0dced",
+      "MemPerc": "0.62%",
+      "MemUsage": "71.41MiB / 11.32GiB",
+      "Name": "pulseforge-prometheus-1",
+      "NetIO": "1.14MB / 150kB",
+      "PIDs": "19"
+    },
+    {
+      "BlockIO": "79.2MB / 905kB",
+      "CPUPerc": "0.45%",
+      "Container": "a314bb842d97ebb9d44b09e05bd4d3d4542daf07a853326a1a0f6a9302ed81a2",
+      "ID": "a314bb842d97",
+      "MemPerc": "10.22%",
+      "MemUsage": "52.35MiB / 512MiB",
+      "Name": "pulseforge-tempo-1",
+      "NetIO": "68.7kB / 24.8kB",
+      "PIDs": "21"
+    },
+    {
+      "BlockIO": "260MB / 946kB",
+      "CPUPerc": "3.53%",
+      "Container": "8a116871eca8c4c25cca15fcf77b1056c7e1459ff9b1e85c3c92c614bd459011",
+      "ID": "8a116871eca8",
+      "MemPerc": "0.88%",
+      "MemUsage": "102.3MiB / 11.32GiB",
+      "Name": "pulseforge-grafana-1",
+      "NetIO": "73.4kB / 62.9kB",
+      "PIDs": "21"
+    },
+    {
+      "BlockIO": "82.4MB / 0B",
+      "CPUPerc": "0.04%",
+      "Container": "01c07a19de7d9d8be859c1361ebd9a6f8df600e8fd92f55f7f6a75251afc8e3f",
+      "ID": "01c07a19de7d",
+      "MemPerc": "5.64%",
+      "MemUsage": "14.44MiB / 256MiB",
+      "Name": "pulseforge-otel-collector-1",
+      "NetIO": "102kB / 63.2kB",
+      "PIDs": "14"
+    },
+    {
+      "BlockIO": "6.86MB / 32.8kB",
+      "CPUPerc": "0.51%",
+      "Container": "e5cd73eec799426911e6197d528d635c45ce8fa21b235a6e9f344b5a165c343e",
+      "ID": "e5cd73eec799",
+      "MemPerc": "0.03%",
+      "MemUsage": "3.945MiB / 11.32GiB",
+      "Name": "pulseforge-redis-1",
+      "NetIO": "1.11kB / 264B",
+      "PIDs": "6"
+    },
+    {
+      "BlockIO": "46.3MB / 1.18MB",
+      "CPUPerc": "0.00%",
+      "Container": "eac7373440c31b10d5e7d169e1cd1894feae541e8ad80c7208413230001cea3d",
+      "ID": "eac7373440c3",
+      "MemPerc": "0.48%",
+      "MemUsage": "55.39MiB / 11.32GiB",
+      "Name": "pulseforge-postgres-1",
+      "NetIO": "905kB / 824kB",
+      "PIDs": "10"
+    },
+    {
+      "BlockIO": "129MB / 1.46MB",
+      "CPUPerc": "0.00%",
+      "Container": "ed0a5a1da7e9aaa85f06e268cee4471cf00da1426d3712b4c4b289dd04dc972a",
+      "ID": "ed0a5a1da7e9",
+      "MemPerc": "2.78%",
+      "MemUsage": "322.1MiB / 11.32GiB",
+      "Name": "pulseforge-minio-1",
+      "NetIO": "18.1MB / 44.3MB",
+      "PIDs": "22"
+    },
+    {
+      "BlockIO": "103MB / 12MB",
+      "CPUPerc": "95.27%",
+      "Container": "6e7ea83bc5ad5a200c175df01cf4fed87ac13a6748e9e6966b17d9e315aa3bfa",
+      "ID": "6e7ea83bc5ad",
+      "MemPerc": "4.30%",
+      "MemUsage": "498.2MiB / 11.32GiB",
+      "Name": "pulseforge-kafka-1",
+      "NetIO": "210kB / 216kB",
+      "PIDs": "141"
+    }
+  ],
+  "docker_stats_after": [
+    {
+      "BlockIO": "7.93MB / 8.19kB",
+      "CPUPerc": "0.00%",
+      "Container": "4503364ed9974186984503d651d7642a4507038d06985fa52a89973524a8acfe",
+      "ID": "4503364ed997",
+      "MemPerc": "0.12%",
+      "MemUsage": "14.23MiB / 11.32GiB",
+      "Name": "pulseforge-dashboard-1",
+      "NetIO": "2.68kB / 126B",
+      "PIDs": "17"
+    },
+    {
+      "BlockIO": "833MB / 636MB",
+      "CPUPerc": "112.13%",
+      "Container": "7bc9f74cefb8a55dd1ac12b47c736f0f7c572855ceef1c3235743034e4e77d0a",
+      "ID": "7bc9f74cefb8",
+      "MemPerc": "61.69%",
+      "MemUsage": "1.851GiB / 3GiB",
+      "Name": "pulseforge-streaming-1",
+      "NetIO": "49.3MB / 22.9MB",
+      "PIDs": "507"
+    },
+    {
+      "BlockIO": "8.84MB / 0B",
+      "CPUPerc": "0.21%",
+      "Container": "c4bb95fef69216ef609532d2263dd73036ee9838312a183aba874677c1ea9ee0",
+      "ID": "c4bb95fef692",
+      "MemPerc": "0.73%",
+      "MemUsage": "84.73MiB / 11.32GiB",
+      "Name": "pulseforge-api-1",
+      "NetIO": "935kB / 2.29MB",
+      "PIDs": "7"
+    },
+    {
+      "BlockIO": "48.4MB / 0B",
+      "CPUPerc": "0.03%",
+      "Container": "b5222d0dc2ef0941709854e06ee1f4f82ade97bf210274c1e8d69866dca5a775",
+      "ID": "b5222d0dc2ef",
+      "MemPerc": "28.02%",
+      "MemUsage": "71.73MiB / 256MiB",
+      "Name": "pulseforge-ops-exporter-1",
+      "NetIO": "252kB / 453kB",
+      "PIDs": "2"
+    },
+    {
+      "BlockIO": "137MB / 1.49MB",
+      "CPUPerc": "0.00%",
+      "Container": "168ad6e0dcedb40f9b762bf7c540c38049a849de7baca987e0066c9dffa7cc5d",
+      "ID": "168ad6e0dced",
+      "MemPerc": "0.62%",
+      "MemUsage": "71.43MiB / 11.32GiB",
+      "Name": "pulseforge-prometheus-1",
+      "NetIO": "1.2MB / 157kB",
+      "PIDs": "19"
+    },
+    {
+      "BlockIO": "79.2MB / 971kB",
+      "CPUPerc": "2.88%",
+      "Container": "a314bb842d97ebb9d44b09e05bd4d3d4542daf07a853326a1a0f6a9302ed81a2",
+      "ID": "a314bb842d97",
+      "MemPerc": "10.37%",
+      "MemUsage": "53.11MiB / 512MiB",
+      "Name": "pulseforge-tempo-1",
+      "NetIO": "69.7kB / 25.3kB",
+      "PIDs": "21"
+    },
+    {
+      "BlockIO": "260MB / 967kB",
+      "CPUPerc": "0.40%",
+      "Container": "8a116871eca8c4c25cca15fcf77b1056c7e1459ff9b1e85c3c92c614bd459011",
+      "ID": "8a116871eca8",
+      "MemPerc": "0.88%",
+      "MemUsage": "102MiB / 11.32GiB",
+      "Name": "pulseforge-grafana-1",
+      "NetIO": "73.4kB / 62.9kB",
+      "PIDs": "21"
+    },
+    {
+      "BlockIO": "82.4MB / 0B",
+      "CPUPerc": "0.28%",
+      "Container": "01c07a19de7d9d8be859c1361ebd9a6f8df600e8fd92f55f7f6a75251afc8e3f",
+      "ID": "01c07a19de7d",
+      "MemPerc": "5.64%",
+      "MemUsage": "14.44MiB / 256MiB",
+      "Name": "pulseforge-otel-collector-1",
+      "NetIO": "104kB / 64.7kB",
+      "PIDs": "14"
+    },
+    {
+      "BlockIO": "6.86MB / 36.9kB",
+      "CPUPerc": "0.46%",
+      "Container": "e5cd73eec799426911e6197d528d635c45ce8fa21b235a6e9f344b5a165c343e",
+      "ID": "e5cd73eec799",
+      "MemPerc": "0.03%",
+      "MemUsage": "3.668MiB / 11.32GiB",
+      "Name": "pulseforge-redis-1",
+      "NetIO": "1.11kB / 264B",
+      "PIDs": "6"
+    },
+    {
+      "BlockIO": "46.6MB / 1.96MB",
+      "CPUPerc": "3.64%",
+      "Container": "eac7373440c31b10d5e7d169e1cd1894feae541e8ad80c7208413230001cea3d",
+      "ID": "eac7373440c3",
+      "MemPerc": "0.51%",
+      "MemUsage": "58.71MiB / 11.32GiB",
+      "Name": "pulseforge-postgres-1",
+      "NetIO": "1.05MB / 964kB",
+      "PIDs": "11"
+    },
+    {
+      "BlockIO": "129MB / 2.66MB",
+      "CPUPerc": "19.34%",
+      "Container": "ed0a5a1da7e9aaa85f06e268cee4471cf00da1426d3712b4c4b289dd04dc972a",
+      "ID": "ed0a5a1da7e9",
+      "MemPerc": "2.80%",
+      "MemUsage": "324.4MiB / 11.32GiB",
+      "Name": "pulseforge-minio-1",
+      "NetIO": "22.1MB / 48.4MB",
+      "PIDs": "22"
+    },
+    {
+      "BlockIO": "103MB / 12.6MB",
+      "CPUPerc": "3.30%",
+      "Container": "6e7ea83bc5ad5a200c175df01cf4fed87ac13a6748e9e6966b17d9e315aa3bfa",
+      "ID": "6e7ea83bc5ad",
+      "MemPerc": "3.88%",
+      "MemUsage": "449.3MiB / 11.32GiB",
+      "Name": "pulseforge-kafka-1",
+      "NetIO": "304kB / 297kB",
+      "PIDs": "114"
+    }
+  ],
+  "scenario": "ingestion",
+  "configuration": {
+    "events": 100,
+    "rate_events_per_second": 10.0,
+    "seed": 26332851,
+    "anomaly_rate": 0
+  },
+  "measured": {
+    "producer_wall_seconds": 20.812,
+    "warehouse_rows_before": 693,
+    "warehouse_rows_after": 793,
+    "new_committed_rows": 100,
+    "producer_end_to_warehouse_observation_seconds": 13.078,
+    "all_events_observed": true
+  },
+  "interpretation": "Drain observation includes two-second polling and is not per-event processing latency. Event-time delay is not measured."
+}

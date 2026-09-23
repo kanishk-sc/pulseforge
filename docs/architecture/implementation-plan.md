@@ -59,7 +59,11 @@ live PostgreSQL/API assertions and an actual browser flow. See
 - [x] API latency/errors, cache outcomes, warehouse failures and modeled throughput/quality views
 - [x] Spark driver processed offsets/progress, retry-aware attempt metrics and durable warehouse state; no false consumer-group lag claim
 - [x] Finite analytics/detector run state, local alert rules, Tempo traces and provisioned operations dashboards
-- [ ] Bounded load/failure acceptance and actual benchmark artifacts with environment metadata (in progress)
+- [x] Bounded local load/failure acceptance and actual benchmark artifacts with environment metadata
+
+Local Phase 5 evidence is in [verification](../verification.md) and the
+[bounded measurement report](../benchmarks/phase5-report.md). Hosted PR checks are
+tracked separately by GitHub Actions; these local results are not production SLAs.
 
 ## 6. AI operations
 - [ ] Operational runbooks, ingestion, embeddings and pgvector retrieval

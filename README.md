@@ -7,7 +7,7 @@ to reliable operational decisions: preserve the original event, validate its con
 process it once at the sink, model the business, detect explainable anomalies, and
 show the evidence behind an incident.
 
-**Current milestone: Phase 5 — observability and reliability, under verification.**
+**Current milestone: Phase 5 — observability and reliability, under PR review.**
 Kafka ingestion, Spark Structured Streaming, raw/cleaned/curated Parquet, a dead-letter
 pipeline, an idempotent PostgreSQL sink, dbt analytics and finite Airflow orchestration
 are implemented. Successful analytics are atomically published to a versioned FastAPI
@@ -394,18 +394,20 @@ security gaps and billable-resource warnings.
 Implemented: event contracts and generation, Kafka/Spark processing, raw/cleaned lake,
 idempotent PostgreSQL sinks, dbt models/tests, Airflow orchestration, immutable analytics
 publication, versioned cached APIs, deterministic incidents/evidence, React operations
-dashboard, API metrics/tracing hooks, Grafana provisioning, Compose and CI.
+dashboard, API/Spark/producer/finite-job telemetry, Grafana/Tempo provisioning,
+bounded local reliability acceptance, Compose and CI.
 
-In progress: Phase 5 streaming/finite-job telemetry and reliability acceptance.
+In progress: hosted Phase 5 PR checks and review; the local acceptance evidence is
+recorded, but the branch is not merged.
 
 Planned: retrieval-grounded operations assistance and any
 real cloud deployment.
 
 ## Screenshots and benchmarks
 
-Phase 5 local benchmark measurements, when verified, are recorded in
-[verification](docs/verification.md) with environment, concurrency, throughput,
-p50/p95/p99 and error counts. They are not production SLAs.
+Phase 5 [bounded local measurements](docs/benchmarks/phase5-report.md) and
+[verification](docs/verification.md) record environment, concurrency, throughput,
+p50/p95/p99, error counts and an interrupted attempt. They are not production SLAs.
 
 ## Engineering decisions and next milestones
 
