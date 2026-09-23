@@ -610,3 +610,44 @@ security or capacity posture. Spark offsets are processed offsets, not committed
 consumer lag. The tests do not claim a cross-Kafka-to-browser trace, a production SLO,
 or a multi-node recovery drill. Publications predating migration `0004` lack durable
 dbt quality artifacts. No Phase 6 work is included.
+
+## PR #5 review corrections and local re-verification — 2026-09-23
+
+The review found that a validation-count telemetry query could stop business ingestion:
+startup failure entered the critical-query cleanup path, and later termination failed
+the Spark supervisor. It now starts after the business queries and is best-effort;
+only `raw`, `dlq` and `valid-events` determine streaming health. The incident gauge
+now counts authoritative `product.incidents` rows because a best-effort detector-run
+update can fail after incident commit. HTTP method and Spark termination metric labels
+are bounded. Focused regressions cover each finding. No volume or checkpoint was removed.
+
+The commands below ran against the review worktree. Isolated Python commands used
+`$env:UV_LINK_MODE='copy'` because the Windows development environment was in use.
+
+| Exact command | Observed result |
+| --- | --- |
+| `uv run --isolated ruff format --check .`; `uv run --isolated ruff check .` | Both passed after the review edits. |
+| `uv lock --check` | 69 packages resolved; lock current. |
+| `uv run --isolated pytest -q -m 'not integration and not spark' --basetemp .pytest_cache/pr5-review-unit-final2` | 105 passed, 32 deselected; two upstream deprecation warnings. |
+| `uv run --isolated pytest -q -m integration --run-integration --run-streaming --basetemp .pytest_cache/pr5-review-streaming` | 15 passed, 10 skipped, 110 deselected in 245.68 s; replay, checkpoint and sink recovery coverage retained. |
+| `uv run --isolated pytest -q -m analytics --run-integration --run-analytics --basetemp .pytest_cache/pr5-review-analytics` | 4 passed, 132 deselected in 96.72 s. |
+| `uv run --isolated pytest -q tests/test_product_integration.py --run-integration --run-product --basetemp .pytest_cache/pr5-review-product` | 6 passed against populated PostgreSQL and live API, including authoritative incident metric. |
+| `npm test -- --run`; `npm run typecheck`; `npm run build` (in `frontend`) | 5 tests passed in two files; typecheck and Vite build exited 0. |
+| `docker compose --profile airflow run --rm --build --no-deps airflow python -m pulseforge.product.cli pipeline --build-key pr5-review-20260923a --project-dir /opt/pulseforge/analytics --profiles-dir /opt/pulseforge/analytics` | dbt PASS=109, WARN=0, ERROR=0, SKIP=0; published build `f99f82d4-d5c9-42b6-a392-81cf671d1623`, zero new incidents. |
+| `docker compose --profile analytics run --rm analytics-dbt test` | 94 data tests plus one hook: PASS=95, WARN=0, ERROR=0, SKIP=0. |
+| `docker compose --profile airflow run --rm --no-deps airflow python /opt/pulseforge/scripts/verify_airflow_dag.py` | Zero import errors; only `verify_warehouse`, `dbt_build`, `quality_summary` finite tasks. |
+| `docker compose --profile observability config --quiet`; `docker compose exec -T prometheus promtool check config /etc/prometheus/prometheus.yml`; `docker compose exec -T prometheus promtool test rules /etc/prometheus/alert-tests.yml` | Compose valid; one rule file with seven rules; deterministic alert tests succeeded. |
+| `uv run --isolated python scripts/verify_observability.py` after rebuilding with `OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318` | API/ops/streaming targets up, 815 committed rows at final check, four dashboards provisioned (6/7/6/5 panels), sampled trace in Tempo with PostgreSQL and Redis spans. The first attempt without the documented OTLP setting failed for missing trace IDs and was not counted as a pass. |
+| `uv run --isolated python scripts/load_phase5.py --scenario warm --requests 5 --concurrency 2 --request-rate 5 --output .pytest_cache/pr5-warm-smoke.json` | 5/5 HTTP 200 and cache hits, zero errors, exit 0; 0.811 s local smoke, not a new benchmark. |
+| `uv run --isolated python scripts/load_phase5.py --scenario fallback --requests 3 --concurrency 1 --request-rate 3 --output .pytest_cache/pr5-failure-smoke.json` while Redis was available | 3/3 HTTP 200 but zero bypasses; scenario condition false, JSON preserved, exit 1. |
+
+After the final image refresh, a real browser opened all four Grafana dashboards;
+expected panels loaded with no displayed query errors. Controlled drills stopped the
+OTLP collector (five API `/health` responses stayed HTTP 200) and Redis (product HTTP
+200 with `X-Cache: bypass`); both were restored healthy in `finally` blocks. The
+rebuilt streaming health file named only the three critical queries. The earlier
+benchmark JSON files remain historical evidence at their recorded SHAs; the two
+review smokes do not replace them. Local Tempo still runs as root on a named volume
+and has time retention but no hard byte cap—acceptable for this optional,
+localhost-bound development stack, not a production posture. Required hosted checks
+and mergeability must be confirmed on the exact final pushed head before merging.
