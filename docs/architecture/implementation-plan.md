@@ -57,8 +57,9 @@ live PostgreSQL/API assertions and an actual browser flow. See
 ## 5. Observability and reliability
 - [x] Prometheus API metrics, provisioned Grafana dashboard and optional FastAPI OpenTelemetry export
 - [x] API latency/errors, cache outcomes, warehouse failures and modeled throughput/quality views
-- [ ] Kafka consumer lag, Spark-native processing and anomaly telemetry
-- [ ] Load tests, failure drills and actual benchmark artifacts with environment metadata
+- [x] Spark driver processed offsets/progress, retry-aware attempt metrics and durable warehouse state; no false consumer-group lag claim
+- [x] Finite analytics/detector run state, local alert rules, Tempo traces and provisioned operations dashboards
+- [ ] Bounded load/failure acceptance and actual benchmark artifacts with environment metadata (in progress)
 
 ## 6. AI operations
 - [ ] Operational runbooks, ingestion, embeddings and pgvector retrieval

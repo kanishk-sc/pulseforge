@@ -6,10 +6,17 @@ from pathlib import Path
 root = Path(__file__).resolve().parents[1]
 target = root / ".env"
 if target.exists():
-    print("Existing .env preserved.")
+    current = target.read_text(encoding="utf-8")
+    if not any(line.startswith("GRAFANA_ADMIN_PASSWORD=") for line in current.splitlines()):
+        separator = "" if current.endswith("\n") else "\n"
+        with target.open("a", encoding="utf-8") as output:
+            output.write(f"{separator}GRAFANA_ADMIN_PASSWORD={secrets.token_hex(24)}\n")
+        print("Existing .env credentials preserved; generated missing Grafana credential.")
+    else:
+        print("Existing .env preserved.")
 else:
     template = (root / ".env.example").read_text(encoding="utf-8")
-    for name in ("POSTGRES_PASSWORD", "MINIO_ROOT_PASSWORD"):
+    for name in ("POSTGRES_PASSWORD", "MINIO_ROOT_PASSWORD", "GRAFANA_ADMIN_PASSWORD"):
         template = template.replace(f"{name}=\n", f"{name}={secrets.token_hex(24)}\n")
     with target.open("x", encoding="utf-8") as output:
         output.write(template)

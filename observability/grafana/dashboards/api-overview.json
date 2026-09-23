@@ -1,45 +1,13 @@
 {
-  "annotations": {"list": []},
-  "editable": false,
+  "annotations": {"list": []}, "editable": false,
   "panels": [
-    {
-      "type": "timeseries",
-      "title": "API request rate",
-      "targets": [
-        {"expr": "sum(rate(pulseforge_http_requests_total[5m])) by (route, status)", "legendFormat": "{{route}} {{status}}"}
-      ],
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
-    },
-    {
-      "type": "timeseries",
-      "title": "API p95 latency",
-      "targets": [
-        {"expr": "histogram_quantile(0.95, sum(rate(pulseforge_http_request_duration_seconds_bucket[5m])) by (le, route))", "legendFormat": "{{route}}"}
-      ],
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
-    },
-    {
-      "type": "timeseries",
-      "title": "Redis cache outcomes",
-      "targets": [
-        {"expr": "sum(rate(pulseforge_cache_operations_total[5m])) by (operation, result)", "legendFormat": "{{operation}} {{result}}"}
-      ],
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
-    },
-    {
-      "type": "stat",
-      "title": "Warehouse query failures",
-      "targets": [
-        {"expr": "sum(increase(pulseforge_analytics_query_failures_total[1h]))", "legendFormat": "failures"}
-      ],
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
-    }
+    {"id": 1, "type": "timeseries", "title": "API requests by route and status class (5m rate)", "description": "Route templates only. No requests yields no series; traffic is not availability.", "datasource": {"uid": "pulseforge-prometheus"}, "targets": [{"expr": "sum by (route,status_class) (rate(pulseforge_http_requests_total[5m]))", "legendFormat": "{{route}} {{status_class}}", "refId": "A"}], "fieldConfig": {"defaults": {"unit": "reqps", "noValue": "No requests"}}, "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}},
+    {"id": 2, "type": "timeseries", "title": "API p95 request duration (5m)", "description": "API handling seconds; excludes browser rendering and upstream processing.", "datasource": {"uid": "pulseforge-prometheus"}, "targets": [{"expr": "histogram_quantile(0.95, sum by (le,route) (rate(pulseforge_http_request_duration_seconds_bucket[5m])))", "legendFormat": "{{route}}", "refId": "A"}], "fieldConfig": {"defaults": {"unit": "s", "noValue": "No requests"}}, "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}},
+    {"id": 3, "type": "timeseries", "title": "Dependency failures (5m count)", "description": "Observed API errors and timeouts; zero does not prove availability.", "datasource": {"uid": "pulseforge-prometheus"}, "targets": [{"expr": "sum by (dependency,reason) (increase(pulseforge_dependency_failures_total[5m]))", "legendFormat": "{{dependency}} {{reason}}", "refId": "A"}], "fieldConfig": {"defaults": {"unit": "short", "noValue": "No observations"}}, "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}},
+    {"id": 4, "type": "timeseries", "title": "Redis cache operations (5m count)", "description": "Hit, miss, stored, error and timeout; PostgreSQL remains authoritative.", "datasource": {"uid": "pulseforge-prometheus"}, "targets": [{"expr": "sum by (operation,result) (increase(pulseforge_cache_operations_total[5m]))", "legendFormat": "{{operation}} {{result}}", "refId": "A"}], "fieldConfig": {"defaults": {"unit": "short", "noValue": "No cache requests"}}, "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}},
+    {"id": 5, "type": "stat", "title": "API scrape available", "description": "Prometheus reachability only; inspect /ready for dependency state.", "datasource": {"uid": "pulseforge-prometheus"}, "targets": [{"expr": "up{job=\"pulseforge-api\"}", "refId": "A"}], "fieldConfig": {"defaults": {"unit": "bool_on_off", "noValue": "Unknown"}}, "gridPos": {"h": 5, "w": 12, "x": 0, "y": 16}},
+    {"id": 6, "type": "stat", "title": "Durable-state exporter scrape available", "description": "Failure may indicate unavailable PostgreSQL or exporter.", "datasource": {"uid": "pulseforge-prometheus"}, "targets": [{"expr": "up{job=\"pulseforge-ops\"}", "refId": "A"}], "fieldConfig": {"defaults": {"unit": "bool_on_off", "noValue": "Unknown"}}, "gridPos": {"h": 5, "w": 12, "x": 12, "y": 16}}
   ],
-  "schemaVersion": 41,
-  "tags": ["pulseforge"],
-  "templating": {"list": []},
-  "time": {"from": "now-6h", "to": "now"},
-  "title": "PulseForge API Overview",
-  "uid": "pulseforge-api-overview",
-  "version": 1
+  "schemaVersion": 41, "tags": ["pulseforge", "operations"], "templating": {"list": []},
+  "time": {"from": "now-6h", "to": "now"}, "title": "PulseForge API and Dependencies", "uid": "pulseforge-api-overview", "version": 2
 }

@@ -109,7 +109,17 @@ jobs:
       - run: docker compose --profile product up -d --build --wait --wait-timeout 180 redis api dashboard
       - name: Verify PostgreSQL to API incident flow
         run: uv run pytest -vv tests/test_product_integration.py --run-integration --run-product --junitxml=product-results.xml
+      - name: Verify live observability stack
+        env:
+          OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+          OTEL_TRACE_SAMPLE_RATIO: "1"
+        run: |
+          docker compose --profile observability up -d --wait --wait-timeout 180 api ops-exporter prometheus tempo otel-collector grafana
+          docker compose exec -T prometheus promtool check config /etc/prometheus/prometheus.yml
+          docker compose exec -T prometheus promtool test rules /etc/prometheus/alert-tests.yml
+          uv run python scripts/verify_observability.py
+          uv run python scripts/load_phase5.py --scenario warm --requests 5 --concurrency 2 --output phase5-smoke.json
       - if: failure()
-        run: docker compose --profile product --profile airflow logs --no-color --tail 150
+        run: docker compose --profile product --profile airflow --profile observability logs --no-color --tail 150
       - if: always()
-        run: docker compose --profile product --profile airflow down
+        run: docker compose --profile product --profile airflow --profile observability down

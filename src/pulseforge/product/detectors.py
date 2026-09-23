@@ -175,15 +175,24 @@ def evaluate(
     connection: psycopg.Connection,
     now: datetime | None = None,
     stale_after_seconds: int = 7200,
+    report: dict | None = None,
 ) -> list[UUID]:
     now = (now or datetime.now(UTC)).astimezone(UTC)
     build = connection.execute(
         """SELECT build_id, published_at FROM product.analytics_builds
            WHERE status='succeeded' ORDER BY published_at DESC LIMIT 1"""
     ).fetchone()
-    if build is None or now - build[1] > timedelta(seconds=stale_after_seconds):
+    if build is None:
+        if report is not None:
+            report["skip_reason"] = "no_publication"
+        return []
+    if now - build[1] > timedelta(seconds=stale_after_seconds):
+        if report is not None:
+            report["skip_reason"] = "stale_publication"
         return []
     build_id = build[0]
+    if report is not None:
+        report["build_id"] = build_id
     evaluation_start = now.replace(minute=0, second=0, microsecond=0) - timedelta(hours=1)
     candidates: list[Candidate] = []
     for region in ("us-east", "us-west", "eu-west", "ap-south"):

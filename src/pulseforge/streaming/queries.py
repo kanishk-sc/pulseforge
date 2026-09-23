@@ -1,3 +1,4 @@
+import logging
 from functools import partial
 
 from pyspark.sql import SparkSession
@@ -7,7 +8,10 @@ from pyspark.sql.streaming import StreamingQuery
 from pulseforge.streaming.config import StreamSettings
 from pulseforge.streaming.schema import RAW_SCHEMA, VALIDATION_SCHEMA
 from pulseforge.streaming.sink import write_batch
-from pulseforge.streaming.validation import validate_payload
+from pulseforge.streaming.telemetry import VALIDATION_REJECTIONS
+from pulseforge.streaming.validation import DETAILS, validate_payload
+
+logger = logging.getLogger(__name__)
 
 
 def start_queries(spark: SparkSession, settings: StreamSettings) -> list[StreamingQuery]:
@@ -53,6 +57,28 @@ def start_queries(spark: SparkSession, settings: StreamSettings) -> list[Streami
         validate = F.udf(validate_payload, VALIDATION_SCHEMA)
         classified = archived.withColumn("validation", validate("raw_payload", "ingested_at"))
         invalid = classified.filter(F.col("validation.error_code").isNotNull())
+
+        def count_rejections(frame, _batch_id: int) -> None:
+            # The diagnostic query has its own checkpoint. A replay may count an attempt
+            # again; it never changes DLQ delivery or the authoritative warehouse.
+            try:
+                for row in frame.groupBy("validation.error_code").count().collect():
+                    code = row["error_code"]
+                    if code in DETAILS:
+                        VALIDATION_REJECTIONS.labels(code).inc(row["count"])
+            except Exception as exc:
+                # Telemetry cannot terminate a business ingestion query.
+                logger.warning(
+                    "validation_telemetry_failed", extra={"error_type": type(exc).__name__}
+                )
+
+        queries.append(
+            invalid.writeStream.foreachBatch(count_rejections)
+            .option("checkpointLocation", settings.checkpoint("validation-counts"))
+            .queryName("validation-counts")
+            .trigger(processingTime=settings.stream_trigger)
+            .start()
+        )
         dlq = invalid.select(
             F.concat_ws(":", "source_topic", "source_partition", "source_offset").alias("key"),
             F.to_json(

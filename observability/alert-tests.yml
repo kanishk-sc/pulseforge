@@ -1,0 +1,137 @@
+rule_files:
+  - alerts.yml
+evaluation_interval: 1m
+tests:
+  - interval: 1m
+    input_series:
+      - series: pulseforge_http_requests_total{method="GET",route="/health",status_class="2xx"}
+        values: 0+18x12
+      - series: pulseforge_http_requests_total{method="GET",route="/health",status_class="5xx"}
+        values: 0+2x12
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: PulseForgeApiErrorRate
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: API 5xx rate exceeds 5% with at least 20 requests in five minutes
+  - interval: 1m
+    input_series:
+      - series: pulseforge_http_requests_total{method="GET",route="/health",status_class="2xx"}
+        values: 0+2x12
+      - series: pulseforge_http_requests_total{method="GET",route="/health",status_class="5xx"}
+        values: 0+1x12
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: PulseForgeApiErrorRate
+        exp_alerts: []
+  - interval: 1m
+    input_series:
+      - series: pulseforge_analytics_latest_attempt_failed
+        values: 1x12
+      - series: pulseforge_analytics_consecutive_failures
+        values: 2x12
+      - series: pulseforge_analytics_publication_present
+        values: 0x12
+      - series: pulseforge_warehouse_committed_rows
+        values: 50x12
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: PulseForgeAnalyticsLatestAttemptFailed
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: Latest finite analytics build attempt failed; inspect build records
+      - eval_time: 10m
+        alertname: PulseForgeRepeatedAnalyticsFailures
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: Two or more consecutive analytics attempts failed
+      - eval_time: 10m
+        alertname: PulseForgePublicationMissingWithData
+        exp_alerts: []
+  - interval: 1m
+    input_series:
+      - series: pulseforge_producer_deliveries_total{result="confirmed"}
+        values: 0+60x12
+      - series: pulseforge_stream_last_progress_timestamp_seconds{query="raw"}
+        values: 0x12
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: PulseForgeStreamingStalledDuringTraffic
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: Raw Spark progress stopped while the producer is confirming traffic
+  - interval: 1m
+    input_series:
+      - series: pulseforge_producer_deliveries_total{result="confirmed"}
+        values: 0x12
+      - series: pulseforge_stream_last_progress_timestamp_seconds{query="raw"}
+        values: 0x12
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: PulseForgeStreamingStalledDuringTraffic
+        exp_alerts: []
+  - interval: 1m
+    input_series:
+      - series: up{job="pulseforge-api",instance="api:8000"}
+        values: 0x12
+      - series: up{job="pulseforge-ops",instance="ops-exporter:9108"}
+        values: 1x12
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: PulseForgeTelemetryTargetUnavailable
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: pulseforge-api
+              instance: api:8000
+            exp_annotations:
+              summary: A required API or durable-state telemetry target is unavailable
+  - interval: 1m
+    input_series:
+      - series: up{job="pulseforge-api",instance="api:8000"}
+        values: 1x12
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: PulseForgeTelemetryTargetUnavailable
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: pulseforge-ops
+            exp_annotations:
+              summary: A required API or durable-state telemetry target is unavailable
+  - interval: 1m
+    input_series:
+      - series: pulseforge_analytics_last_success_timestamp_seconds
+        values: 0x130
+      - series: pulseforge_analytics_source_max_ingested_timestamp_seconds
+        values: 60x130
+      - series: pulseforge_warehouse_source_max_ingested_timestamp_seconds
+        values: 120x130
+    alert_rule_test:
+      - eval_time: 2h
+        alertname: PulseForgePublicationBehindIngestion
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: Last publication is over one hour old and newer warehouse data is unpublished
+  - interval: 1m
+    input_series:
+      - series: pulseforge_analytics_last_success_timestamp_seconds
+        values: 0x130
+      - series: pulseforge_analytics_source_max_ingested_timestamp_seconds
+        values: 120x130
+      - series: pulseforge_warehouse_source_max_ingested_timestamp_seconds
+        values: 120x130
+    alert_rule_test:
+      - eval_time: 2h
+        alertname: PulseForgePublicationBehindIngestion
+        exp_alerts: []

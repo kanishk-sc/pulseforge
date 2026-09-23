@@ -9,6 +9,7 @@ from pulseforge.streaming.config import StreamSettings
 from pulseforge.streaming.progress import ProgressLogger
 from pulseforge.streaming.queries import start_queries
 from pulseforge.streaming.runtime import spark_session
+from pulseforge.streaming.telemetry import start_metrics_server
 from pulseforge.streaming.warehouse import connect, initialize_schema
 
 logger = logging.getLogger(__name__)
@@ -24,6 +25,10 @@ def main() -> None:
     HEALTH_FILE.unlink(missing_ok=True)
     with connect(settings) as connection:
         initialize_schema(connection)
+    try:
+        start_metrics_server()
+    except Exception as exc:
+        logger.warning("stream_metrics_unavailable", extra={"error_type": type(exc).__name__})
     spark = spark_session(settings)
     queries = []
     spark.streams.addListener(ProgressLogger())

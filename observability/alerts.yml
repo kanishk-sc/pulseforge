@@ -1,0 +1,72 @@
+groups:
+  - name: pulseforge-operational
+    rules:
+      - alert: PulseForgeApiErrorRate
+        expr: |
+          sum(increase(pulseforge_http_requests_total[5m])) >= 20
+          and on() (
+            sum(rate(pulseforge_http_requests_total{status_class="5xx"}[5m]))
+            / clamp_min(sum(rate(pulseforge_http_requests_total[5m])), 0.000001) > 0.05
+          )
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: API 5xx rate exceeds 5% with at least 20 requests in five minutes
+      - alert: PulseForgeStreamingStalledDuringTraffic
+        expr: |
+          sum(rate(pulseforge_producer_deliveries_total{result="confirmed"}[2m])) > 0.1
+          and on() (
+            (time() - max(pulseforge_stream_last_progress_timestamp_seconds{query="raw"}) > 120)
+            or absent(pulseforge_stream_last_progress_timestamp_seconds{query="raw"})
+          )
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: Raw Spark progress stopped while the producer is confirming traffic
+      - alert: PulseForgeAnalyticsLatestAttemptFailed
+        expr: pulseforge_analytics_latest_attempt_failed == 1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: Latest finite analytics build attempt failed; inspect build records
+      - alert: PulseForgeRepeatedAnalyticsFailures
+        expr: pulseforge_analytics_consecutive_failures >= 2
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: Two or more consecutive analytics attempts failed
+      - alert: PulseForgePublicationBehindIngestion
+        expr: |
+          time() - pulseforge_analytics_last_success_timestamp_seconds > 3600
+          and on() (
+            pulseforge_warehouse_source_max_ingested_timestamp_seconds
+            > pulseforge_analytics_source_max_ingested_timestamp_seconds
+          )
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Last publication is over one hour old and newer warehouse data is unpublished
+      - alert: PulseForgePublicationMissingWithData
+        expr: |
+          pulseforge_analytics_publication_present == 0
+          and on() pulseforge_warehouse_committed_rows > 0
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: Warehouse has data but no verified analytics publication
+      - alert: PulseForgeTelemetryTargetUnavailable
+        expr: |
+          up{job=~"pulseforge-api|pulseforge-ops"} == 0
+          or absent(up{job="pulseforge-api"})
+          or absent(up{job="pulseforge-ops"})
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: A required API or durable-state telemetry target is unavailable

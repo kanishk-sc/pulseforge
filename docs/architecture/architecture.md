@@ -131,12 +131,19 @@ before external exposure. Redis never stores authoritative incidents or health s
 
 ## Observability and explainable incidents
 
-JSON logs include request IDs and request duration; health endpoints expose dependency
-state. Prometheus scrapes bounded route-template request counts/latency, cache outcomes
-and warehouse failures. Grafana configuration is provisioned from source. FastAPI is
-OpenTelemetry-instrumented and exports OTLP/HTTP only when configured. Kafka input rate,
-consumer lag and Spark batch telemetry remain future work. Metrics never use event or
-customer IDs as labels because those create unbounded cardinality.
+JSON logs include request IDs, request duration and trace/span IDs when tracing is
+active. `/health` is process liveness, `/ready` is dependency readiness, Spark query
+progress is diagnostic, and the build publication is the only verified analytics
+generation. Prometheus scrapes bounded route-template API metrics, producer delivery
+attempts, Spark driver progress and PostgreSQL-derived finite-job state. The Spark raw
+query exposes processed Kafka end offsets, **not** conventional committed consumer-group
+lag. Durable warehouse rows and build records are authoritative; in-process counters
+can reset or repeat attempted work after replay. Missing telemetry is unknown, not zero.
+The optional collector exports sampled request-local spans to local Tempo. Grafana
+dashboards and data sources are provisioned from source; alert rules remain local and
+separate from business incidents. Telemetry failures cannot veto warehouse commits or
+product responses. Full signal definitions and limitations are in
+[Phase 5 design](phase-5-design.md). Metrics never use event or customer IDs as labels.
 
 Detectors use explicit minimum sample sizes, trailing historical baselines, current-
 window exclusion and a six-hour cooldown. Incidents persist observed values, baselines,
