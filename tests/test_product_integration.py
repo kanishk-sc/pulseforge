@@ -1,11 +1,15 @@
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import httpx
 import psycopg
 import pytest
-from psycopg.rows import dict_row
+from prometheus_client import generate_latest
+from psycopg.rows import dict_row, tuple_row
 
+from pulseforge.config import Settings
+from pulseforge.ops_exporter import create_registry
+from pulseforge.product.operational_runs import recorded_evaluate
 from pulseforge.product.publication import begin_build, fail_build
 from pulseforge.streaming.config import StreamSettings
 
@@ -85,6 +89,39 @@ def test_publication_metadata_and_evidence_use_the_frozen_dbt_snapshot():
     assert build["source_max_ingested_at"] == source["max_ingested_at"]
     assert build["source_event_count"] == source["event_count"]
     assert missing_evaluation_times["missing"] == 0
+
+
+def test_finite_job_telemetry_records_quality_and_stale_detector_skip():
+    with connect() as connection:
+        quality = connection.execute(
+            """SELECT result_count, pass_count, success_count
+               FROM product.dbt_quality_runs q JOIN product.analytics_builds b USING (build_id)
+               WHERE b.status='succeeded' ORDER BY b.published_at DESC LIMIT 1"""
+        ).fetchone()
+        assert quality is not None
+        assert quality["result_count"] == quality["pass_count"] + quality["success_count"]
+        assert quality["result_count"] > 0
+        # The detector's existing connection contract uses positional build rows.
+        connection.row_factory = tuple_row
+        created = recorded_evaluate(connection, datetime.now(UTC) + timedelta(days=30), 60)
+        connection.row_factory = dict_row
+        assert created == []
+        run = connection.execute(
+            """SELECT status,skip_reason,created_incidents FROM product.detector_runs
+               ORDER BY started_at DESC LIMIT 1"""
+        ).fetchone()
+        assert run == {
+            "status": "skipped",
+            "skip_reason": "stale_publication",
+            "created_incidents": 0,
+        }
+
+
+def test_incident_metric_reads_authoritative_incident_rows():
+    with connect() as connection:
+        expected = connection.execute("SELECT count(*) FROM product.incidents").fetchone()["count"]
+    metrics = generate_latest(create_registry(Settings())).decode()
+    assert f"pulseforge_detector_incidents_created {expected}.0" in metrics
 
 
 def test_failed_build_never_replaces_latest_successful_publication():

@@ -7,7 +7,7 @@ to reliable operational decisions: preserve the original event, validate its con
 process it once at the sink, model the business, detect explainable anomalies, and
 show the evidence behind an incident.
 
-**Current milestone: Phase 4 — operations product, verified locally.**
+**Current milestone: Phase 5 — observability and reliability, under PR review.**
 Kafka ingestion, Spark Structured Streaming, raw/cleaned/curated Parquet, a dead-letter
 pipeline, an idempotent PostgreSQL sink, dbt analytics and finite Airflow orchestration
 are implemented. Successful analytics are atomically published to a versioned FastAPI
@@ -366,7 +366,12 @@ Producer logs distinguish acknowledged events from a failed delivery. Streaming 
 report batch input/insert counts and watermark drops. The Spark container health check
 reports live query threads, not an end-to-end latency or freshness guarantee.
 Dependency failures are visible through readiness, independent of API liveness.
-Phase 5 adds metrics and traces after the pipeline has meaningful measurements.
+Phase 5 adds local Prometheus, Grafana, Tempo and OpenTelemetry collection behind an
+optional Compose profile. The API, Spark driver, producer and a PostgreSQL-backed
+finite-job exporter expose bounded operational signals. These are diagnostic views;
+no heartbeat alone proves end-to-end delivery. See the
+[Phase 5 signal contract](docs/architecture/phase-5-design.md) and
+[runbooks](docs/operations/runbooks.md).
 
 The planned assistant retrieves runbooks, incident evidence and recent metrics before
 responding. Statistical detection remains outside the LLM. The main platform will
@@ -389,18 +394,20 @@ security gaps and billable-resource warnings.
 Implemented: event contracts and generation, Kafka/Spark processing, raw/cleaned lake,
 idempotent PostgreSQL sinks, dbt models/tests, Airflow orchestration, immutable analytics
 publication, versioned cached APIs, deterministic incidents/evidence, React operations
-dashboard, API metrics/tracing hooks, Grafana provisioning, Compose and CI.
+dashboard, API/Spark/producer/finite-job telemetry, Grafana/Tempo provisioning,
+bounded local reliability acceptance, Compose and CI.
 
-In progress: Spark/Kafka-native monitoring and incident-resolution workflows.
+In progress: hosted Phase 5 PR checks and review; the local acceptance evidence is
+recorded, but the branch is not merged.
 
-Planned: retrieval-grounded operations assistance, load/failure experiments and any
+Planned: retrieval-grounded operations assistance and any
 real cloud deployment.
 
 ## Screenshots and benchmarks
 
-No screenshot or load-test performance number is claimed. The verification record is a
-functional test report, not a benchmark. A future benchmark must identify environment,
-concurrency, throughput, p50/p95/p99 and error rate.
+Phase 5 [bounded local measurements](docs/benchmarks/phase5-report.md) and
+[verification](docs/verification.md) record environment, concurrency, throughput,
+p50/p95/p99, error counts and an interrupted attempt. They are not production SLAs.
 
 ## Engineering decisions and next milestones
 
@@ -415,7 +422,26 @@ concurrency, throughput, p50/p95/p99 and error rate.
 - The dashboard contains no fake values and exposes upstream empty/error conditions.
 - Terraform models an interview-defensible deployment boundary without applying paid infrastructure.
 
-Next is Phase 4: operational APIs, explainable anomaly detectors and the dashboard.
-Subsequent phases add
-observability and evidence-based AI. Kubernetes and AWS Terraform follow only after
-the local application works; no paid infrastructure is created automatically.
+Phase 4's operational APIs, explainable anomaly detectors and dashboard are complete.
+Phase 5 adds operational evidence and bounded reliability experiments. Evidence-based
+AI is a later, separate phase. No paid infrastructure is created automatically.
+
+## Optional local observability
+
+Run `uv run python scripts/init_env.py` once to generate a local Grafana password without
+replacing existing credentials. In PowerShell, start the optional stack and enable API
+trace export with:
+
+```powershell
+$env:OTEL_EXPORTER_OTLP_ENDPOINT='http://otel-collector:4318'
+docker compose --profile observability up -d --build --wait api ops-exporter prometheus tempo otel-collector grafana
+docker compose --profile product run --rm --no-deps product-migrate
+```
+
+Grafana is at `http://127.0.0.1:3000` (user `admin`, generated password in `.env`),
+Prometheus at `http://127.0.0.1:9090`, and Tempo at `http://127.0.0.1:3200`.
+The default `docker compose up -d --build --wait` remains unchanged. Stop only the
+optional services with
+`docker compose --profile observability stop grafana prometheus tempo otel-collector ops-exporter`;
+do not use `down -v` because that removes development data. See the runbooks for
+signals, safe failure drills and load-test commands.

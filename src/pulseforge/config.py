@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     analytics_stale_after_seconds: int = Field(default=7200, ge=60, le=86400)
     analytics_max_range_days: int = Field(default=31, ge=1, le=366)
     otel_exporter_otlp_endpoint: str | None = None
+    otel_trace_sample_ratio: float = Field(default=0.1, ge=0, le=1)
 
     @property
     def database_url(self) -> URL:

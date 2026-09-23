@@ -2,11 +2,14 @@ import json
 import logging
 from contextlib import closing
 
+import psycopg
+from botocore.exceptions import BotoCoreError, ClientError
 from pyspark.sql import DataFrame
 
 from pulseforge.dependencies import s3_client
 from pulseforge.streaming.config import StreamSettings
 from pulseforge.streaming.lake import batch_path, curated, publish_manifest, write_layer
+from pulseforge.streaming.telemetry import SINK_FAILURES, SINK_INPUT_ROWS, SINK_INSERTED_ROWS
 from pulseforge.streaming.warehouse import (
     EVENT_COLUMNS,
     candidate_query,
@@ -75,7 +78,25 @@ def write_batch(frame: DataFrame, batch_id: int, settings: StreamSettings) -> No
                     count,
                     inserted,
                 )
+                try:
+                    SINK_INPUT_ROWS.inc(count)
+                    SINK_INSERTED_ROWS.inc(inserted)
+                except Exception:
+                    logger.warning("sink_telemetry_failed")
             finally:
                 candidates.unpersist()
+    except Exception as exc:
+        dependency = (
+            "database"
+            if isinstance(exc, psycopg.Error)
+            else "lake"
+            if isinstance(exc, (BotoCoreError, ClientError))
+            else "other"
+        )
+        try:
+            SINK_FAILURES.labels(dependency).inc()
+        except Exception:
+            logger.warning("sink_telemetry_failed")
+        raise
     finally:
         frame.unpersist()

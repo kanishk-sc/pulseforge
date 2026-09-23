@@ -81,7 +81,7 @@ def test_redis_failure_degrades_to_warehouse(client, monkeypatch):
     response = client.get("/api/metrics/overview")
 
     assert response.status_code == 200
-    assert response.headers["X-Cache"] == "miss"
+    assert response.headers["X-Cache"] == "bypass"
 
 
 def test_pipeline_status_and_prometheus_metrics(client, monkeypatch):

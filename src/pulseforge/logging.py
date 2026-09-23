@@ -2,6 +2,8 @@ import json
 import logging
 from datetime import UTC, datetime
 
+from opentelemetry import trace
+
 
 class JsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
@@ -11,9 +13,21 @@ class JsonFormatter(logging.Formatter):
             "logger": record.name,
             "message": record.getMessage(),
         }
-        for key in ("request_id", "path", "status", "duration_ms", "event_id", "error_type"):
+        for key in (
+            "request_id",
+            "path",
+            "status",
+            "duration_ms",
+            "event_id",
+            "error_type",
+            "stage",
+        ):
             if hasattr(record, key):
                 payload[key] = getattr(record, key)
+        span_context = trace.get_current_span().get_span_context()
+        if span_context.is_valid:
+            payload["trace_id"] = f"{span_context.trace_id:032x}"
+            payload["span_id"] = f"{span_context.span_id:016x}"
         # Do not serialize exception messages: connection errors may contain credentials.
         if record.exc_info and record.exc_info[0]:
             payload["error_type"] = record.exc_info[0].__name__

@@ -7,6 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from pulseforge.product.models import BuildContext
+from pulseforge.telemetry import traced_async
 
 METRIC_TABLES = {
     "payments": ("product.payment_health_hourly", "metric_hour_utc"),
@@ -26,6 +27,7 @@ def build_context(row: dict[str, Any], stale_after_seconds: int) -> BuildContext
     )
 
 
+@traced_async("postgres.latest_build")
 async def latest_build(engine: AsyncEngine, stale_after_seconds: int) -> BuildContext | None:
     query = text(
         """SELECT build_id, dbt_invocation_id, published_at, source_max_event_ts,
@@ -39,6 +41,7 @@ async def latest_build(engine: AsyncEngine, stale_after_seconds: int) -> BuildCo
     return build_context(dict(row), stale_after_seconds) if row else None
 
 
+@traced_async("postgres.metric_rows")
 async def metric_rows(
     engine: AsyncEngine,
     metric: str,
@@ -64,6 +67,7 @@ async def metric_rows(
         return [dict(row) for row in rows.mappings().all()]
 
 
+@traced_async("postgres.quality_state")
 async def quality_state(engine: AsyncEngine, stale_after_seconds: int) -> dict[str, Any]:
     build = await latest_build(engine, stale_after_seconds)
     query = text(
@@ -104,6 +108,7 @@ def decode_cursor(cursor: str) -> tuple[datetime, UUID]:
         raise ValueError("invalid cursor") from exc
 
 
+@traced_async("postgres.list_incidents")
 async def list_incidents(
     engine: AsyncEngine,
     region: str | None,
@@ -142,6 +147,7 @@ async def list_incidents(
     return rows, next_cursor
 
 
+@traced_async("postgres.incident_detail")
 async def incident_detail(engine: AsyncEngine, incident_id: UUID) -> dict[str, Any] | None:
     async with engine.connect() as connection:
         incident = (

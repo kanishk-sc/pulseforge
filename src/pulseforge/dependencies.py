@@ -9,6 +9,12 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from pulseforge.config import Settings
+from pulseforge.telemetry import (
+    DEPENDENCY_FAILURES,
+    failure_reason,
+    record_counter,
+    trace_operation,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -50,9 +56,12 @@ async def check_dependencies(settings: Settings, engine: AsyncEngine) -> dict[st
 
     async def check(name: str, operation) -> tuple[str, str]:
         try:
-            await asyncio.wait_for(operation(), timeout=4)
+            with trace_operation(f"dependency.{name}"):
+                await asyncio.wait_for(operation(), timeout=4)
             return name, "up"
         except Exception as exc:
+            metric_name = "s3" if name == "object_storage" else name
+            record_counter(DEPENDENCY_FAILURES, metric_name, failure_reason(exc))
             logger.warning(
                 "dependency_unavailable %s", name, extra={"error_type": type(exc).__name__}
             )

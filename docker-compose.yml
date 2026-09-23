@@ -18,6 +18,7 @@ x-app: &app
     ANALYTICS_CACHE_TTL_SECONDS: ${ANALYTICS_CACHE_TTL_SECONDS:-60}
     ANALYTICS_STALE_AFTER_SECONDS: ${ANALYTICS_STALE_AFTER_SECONDS:-7200}
     OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+    OTEL_TRACE_SAMPLE_RATIO: ${OTEL_TRACE_SAMPLE_RATIO:-0.1}
   init: true
 
 services:
@@ -149,6 +150,7 @@ services:
       EVENTS_PER_SECOND: ${EVENTS_PER_SECOND:-10}
       ANOMALY_RATE: ${ANOMALY_RATE:-0.02}
       GENERATOR_SEED: ${GENERATOR_SEED:-42}
+      PULSEFORGE_PRODUCER_METRICS: "1"
     depends_on:
       bootstrap: {condition: service_completed_successfully}
     stop_grace_period: 45s
@@ -239,10 +241,17 @@ services:
   prometheus:
     image: prom/prometheus:v3.5.0
     profiles: ["observability"]
-    command: ["--config.file=/etc/prometheus/prometheus.yml"]
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=48h
+      - --storage.tsdb.retention.size=512MB
     ports: ["127.0.0.1:9090:9090"]
     volumes:
       - "./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro"
+      - "./observability/alerts.yml:/etc/prometheus/alerts.yml:ro"
+      - "./observability/alert-tests.yml:/etc/prometheus/alert-tests.yml:ro"
+      - "prometheus-data:/prometheus"
     depends_on:
       api: {condition: service_healthy}
     restart: unless-stopped
@@ -252,7 +261,7 @@ services:
     profiles: ["observability"]
     environment:
       GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-pulseforge-local-only}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Run scripts/init_env.py first}
       GF_USERS_ALLOW_SIGN_UP: "false"
     ports: ["127.0.0.1:3000:3000"]
     volumes:
@@ -263,6 +272,38 @@ services:
       prometheus: {condition: service_started}
     restart: unless-stopped
 
+  ops-exporter:
+    <<: *app
+    profiles: ["observability"]
+    command: python -m pulseforge.ops_exporter
+    depends_on:
+      postgres: {condition: service_healthy}
+    mem_limit: 256m
+    restart: unless-stopped
+
+  otel-collector:
+    image: otel/opentelemetry-collector:0.143.0
+    profiles: ["observability"]
+    command: ["--config=/etc/otelcol/config.yaml"]
+    ports: ["127.0.0.1:4318:4318"]
+    volumes:
+      - "./observability/otel-collector.yml:/etc/otelcol/config.yaml:ro"
+    mem_limit: 256m
+    restart: unless-stopped
+
+  tempo:
+    image: grafana/tempo:2.9.5
+    profiles: ["observability"]
+    # The named local volume is created root-owned; Tempo otherwise cannot create blocks.
+    user: "0:0"
+    command: ["-config.file=/etc/tempo.yaml"]
+    ports: ["127.0.0.1:3200:3200"]
+    volumes:
+      - "./observability/tempo.yml:/etc/tempo.yaml:ro"
+      - "tempo-data:/tmp/tempo"
+    mem_limit: 512m
+    restart: unless-stopped
+
 volumes:
   postgres-data:
   kafka-data:
@@ -270,3 +311,5 @@ volumes:
   airflow-state:
   redis-data:
   grafana-data:
+  prometheus-data:
+  tempo-data:

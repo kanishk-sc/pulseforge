@@ -32,10 +32,15 @@ class FakeRedis:
 
 
 class TimeoutRedis(FakeRedis):
+    def __init__(self):
+        super().__init__()
+        self.set_attempted = False
+
     async def get(self, key: str) -> str | None:
         raise TimeoutError("cache timed out")
 
     async def setex(self, key: str, ttl: int, value: str) -> None:
+        self.set_attempted = True
         raise TimeoutError("cache timed out")
 
 
@@ -157,7 +162,8 @@ def test_stale_empty_and_redis_outage_are_explicit(client, monkeypatch):
 
 
 def test_redis_timeout_falls_back_to_database(client, monkeypatch):
-    client.app.state.redis = TimeoutRedis()
+    cache = TimeoutRedis()
+    client.app.state.redis = cache
     monkeypatch.setattr("pulseforge.product.api.latest_build", AsyncMock(return_value=build()))
     rows = AsyncMock(return_value=[payment_row()])
     monkeypatch.setattr("pulseforge.product.api.metric_rows", rows)
@@ -167,7 +173,23 @@ def test_redis_timeout_falls_back_to_database(client, monkeypatch):
     assert response.status_code == 200
     assert response.headers["X-Cache"] == "bypass"
     assert response.json()["points"][0]["payment_attempt_count"] == 4
+    assert not cache.set_attempted
     rows.assert_awaited_once()
+
+
+def test_broken_cache_metric_does_not_break_product_response(client, monkeypatch):
+    class BrokenMetric:
+        def labels(self, *_args):
+            raise RuntimeError("metrics registry unavailable")
+
+    monkeypatch.setattr("pulseforge.product.api.CACHE_OPERATIONS", BrokenMetric())
+    monkeypatch.setattr("pulseforge.product.api.latest_build", AsyncMock(return_value=build()))
+    monkeypatch.setattr("pulseforge.product.api.metric_rows", AsyncMock(return_value=[]))
+
+    response = client.get("/api/v1/revenue")
+
+    assert response.status_code == 200
+    assert response.headers["X-Cache"] == "miss"
 
 
 def test_unpublished_and_database_unavailable_are_not_fabricated(client, monkeypatch):

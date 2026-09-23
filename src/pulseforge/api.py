@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
+from opentelemetry.trace import SpanKind, Status, StatusCode
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from pydantic import BaseModel, Field
 from redis.asyncio import Redis, from_url
@@ -28,8 +29,12 @@ from pulseforge.product.api import create_product_router
 from pulseforge.telemetry import (
     ANALYTICS_QUERY_FAILURES,
     CACHE_OPERATIONS,
+    DEPENDENCY_FAILURES,
     configure_tracing,
+    failure_reason,
     observe_request,
+    record_counter,
+    trace_operation,
 )
 
 logger = logging.getLogger(__name__)
@@ -66,6 +71,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         finally:
             await app.state.redis.aclose()
             await app.state.engine.dispose()
+            if hasattr(app.state, "trace_provider"):
+                app.state.trace_provider.shutdown()
 
     app = FastAPI(title="PulseForge API", version="0.1.0", lifespan=lifespan)
     app.include_router(create_product_router(settings))
@@ -76,23 +83,32 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         candidate = request.headers.get("x-request-id", "")
         request_id = candidate if re.fullmatch(r"[a-zA-Z0-9_-]{1,64}", candidate) else str(uuid4())
         started = time.monotonic()
-        try:
-            response = await call_next(request)
-        except Exception:
-            logger.exception("request_failed", extra={"request_id": request_id})
-            response = JSONResponse(
-                status_code=500, content={"error": "internal_error", "request_id": request_id}
+        with app.state.tracer.start_as_current_span("http.request", kind=SpanKind.SERVER) as span:
+            try:
+                response = await call_next(request)
+            except Exception:
+                logger.exception("request_failed", extra={"request_id": request_id})
+                response = JSONResponse(
+                    status_code=500, content={"error": "internal_error", "request_id": request_id}
+                )
+            route = request.scope.get("route")
+            route_path = getattr(route, "path", "unmatched")
+            span.update_name(f"{request.method} {route_path}")
+            span.set_attribute("http.request.method", request.method)
+            span.set_attribute("http.route", route_path)
+            span.set_attribute("http.response.status_code", response.status_code)
+            if response.status_code >= 500:
+                span.set_status(Status(StatusCode.ERROR))
+            response.headers["X-Request-ID"] = request_id
+            logger.info(
+                "http_request",
+                extra={
+                    "request_id": request_id,
+                    "path": route_path,
+                    "status": response.status_code,
+                    "duration_ms": round((time.monotonic() - started) * 1000, 2),
+                },
             )
-        response.headers["X-Request-ID"] = request_id
-        logger.info(
-            "http_request",
-            extra={
-                "request_id": request_id,
-                "path": request.url.path,
-                "status": response.status_code,
-                "duration_ms": round((time.monotonic() - started) * 1000, 2),
-            },
-        )
         return response
 
     @app.get("/health", response_model=HealthResponse, tags=["health"])
@@ -116,32 +132,44 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         redis_client: Redis, engine, hours: int
     ) -> tuple[AnalyticsOverview, str]:
         cache_key = f"analytics:overview:v1:{hours}"
+        cache_available = True
         try:
-            async with asyncio.timeout(0.5):
-                cached = await redis_client.get(cache_key)
+            with trace_operation("redis.get"):
+                async with asyncio.timeout(0.5):
+                    cached = await redis_client.get(cache_key)
             if cached:
-                CACHE_OPERATIONS.labels("get", "hit").inc()
+                record_counter(CACHE_OPERATIONS, "get", "hit")
                 return AnalyticsOverview.model_validate_json(cached), "hit"
-            CACHE_OPERATIONS.labels("get", "miss").inc()
-        except (RedisError, TimeoutError):
-            CACHE_OPERATIONS.labels("get", "unavailable").inc()
+            record_counter(CACHE_OPERATIONS, "get", "miss")
+        except (RedisError, TimeoutError) as exc:
+            cache_available = False
+            reason = failure_reason(exc)
+            record_counter(CACHE_OPERATIONS, "get", reason)
+            record_counter(DEPENDENCY_FAILURES, "redis", reason)
 
         try:
-            overview = await fetch_overview(engine, hours)
+            with trace_operation("postgres.analytics_overview"):
+                overview = await fetch_overview(engine, hours)
         except (SQLAlchemyError, TimeoutError) as exc:
-            ANALYTICS_QUERY_FAILURES.inc()
+            record_counter(ANALYTICS_QUERY_FAILURES)
+            record_counter(DEPENDENCY_FAILURES, "postgres", failure_reason(exc))
             logger.warning("analytics_query_failed", extra={"error_type": type(exc).__name__})
             raise HTTPException(status_code=503, detail="analytics_warehouse_unavailable") from exc
+        if not cache_available:
+            return overview, "bypass"
         try:
-            async with asyncio.timeout(0.5):
-                await redis_client.setex(
-                    cache_key,
-                    settings.analytics_cache_ttl_seconds,
-                    overview.model_dump_json(),
-                )
-            CACHE_OPERATIONS.labels("set", "stored").inc()
-        except (RedisError, TimeoutError):
-            CACHE_OPERATIONS.labels("set", "unavailable").inc()
+            with trace_operation("redis.set"):
+                async with asyncio.timeout(0.5):
+                    await redis_client.setex(
+                        cache_key,
+                        settings.analytics_cache_ttl_seconds,
+                        overview.model_dump_json(),
+                    )
+            record_counter(CACHE_OPERATIONS, "set", "stored")
+        except (RedisError, TimeoutError) as exc:
+            reason = failure_reason(exc)
+            record_counter(CACHE_OPERATIONS, "set", reason)
+            record_counter(DEPENDENCY_FAILURES, "redis", reason)
         return overview, "miss"
 
     @app.get(
@@ -167,9 +195,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     async def pipeline_status(request: Request) -> PipelineStatus:
         try:
-            return await fetch_pipeline_status(request.app.state.engine)
+            with trace_operation("postgres.pipeline_status"):
+                return await fetch_pipeline_status(request.app.state.engine)
         except (SQLAlchemyError, TimeoutError) as exc:
-            ANALYTICS_QUERY_FAILURES.inc()
+            record_counter(ANALYTICS_QUERY_FAILURES)
+            record_counter(DEPENDENCY_FAILURES, "postgres", failure_reason(exc))
             raise HTTPException(status_code=503, detail="analytics_warehouse_unavailable") from exc
 
     @app.get("/metrics", include_in_schema=False)
