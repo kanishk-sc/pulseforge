@@ -716,4 +716,12 @@ The `pulseforge_minio-data` mount remained `/data` and the `pulseforge` bucket h
 2,345 objects before and after container recreation. Streaming restarted healthy.
 The replacement uses the same archived community binary, not a security upgrade;
 localhost binding and lack of production security claims still apply. Final hosted
-checks must be rerun on the corrected PR head before claiming CI success.
+checks must be judged on each exact PR head. On corrected head
+`8d2b35bb5346bd74def87f4a7d9077dc2df7b465`, both the
+[push run](https://github.com/kanishk-sc/pulseforge/actions/runs/36181399429) and
+[pull-request run](https://github.com/kanishk-sc/pulseforge/actions/runs/36181403543)
+completed successfully: Python, analytics, compose/streaming and product/assistant/
+observability jobs all passed. The local post-repair command
+`uv run --isolated pytest -q -m integration --run-integration --run-streaming --basetemp .pytest_cache/phase6-streaming-minio-final`
+also passed: 15 passed, 14 skipped, 125 deselected in 267.54 seconds. A later
+documentation-only commit does not inherit CI status; its own checks must finish.
