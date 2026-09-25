@@ -314,6 +314,11 @@ download or assistant migration. To enable indexed semantic runbooks locally, ke
 existing PostgreSQL named volume and run these PowerShell-compatible commands. The
 one-time model download contacts the public Hugging Face model repository; subsequent
 indexing and explanations use the pinned local snapshot offline.
+MinIO now builds the same pinned 2025-09-07 release from its
+[official GitHub release asset](https://github.com/minio/minio/releases/tag/RELEASE.2025-09-07T16-13-09Z),
+verified by SHA-256, because fresh CI runners cannot pull the previously configured
+Quay image. Its existing `minio-data` volume is unchanged; first build downloads the
+110.99 MB release binary.
 
 ```powershell
 uv sync --frozen

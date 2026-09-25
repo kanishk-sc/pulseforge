@@ -698,3 +698,22 @@ scored. Provider transport tests are mocked; no live provider inference or exter
 incident/runbook transmission was authorized. See
 [evaluation](assistant/evaluation.md) for rubric and measured report. The API remains
 unauthenticated and bound to localhost; it must not be exposed publicly.
+
+### Hosted CI registry recovery on PR #6
+
+The initial push and pull-request runs at `7c8793e567b4fc655cae2261803697ed7dc22149`
+passed the Python and analytics jobs but failed compose/product integration before
+their tests: Quay returned `401 Unauthorized` for the pre-existing pinned MinIO
+image. The same Quay pull failed locally. The exact official MinIO release binary
+remained available on GitHub with published SHA-256
+`7c5bd8512c6e966455b1d198209358b2d191c77a83ab377c4073281065fb855f`
+for amd64 (an arm64 checksum is also pinned). `infra/docker/minio.Dockerfile` now
+builds from that asset without changing release or storage volume. The first local
+Dockerfile build caught Alpine BusyBox's `sha256sum` accepting `-c` rather than
+`--check`; the corrected build verified the checksum and `minio --version` reported
+`RELEASE.2025-09-07T16-13-09Z`, commit `07c3a429bfed433e49018cb0f78a52145d4bedeb`.
+The `pulseforge_minio-data` mount remained `/data` and the `pulseforge` bucket held
+2,345 objects before and after container recreation. Streaming restarted healthy.
+The replacement uses the same archived community binary, not a security upgrade;
+localhost binding and lack of production security claims still apply. Final hosted
+checks must be rerun on the corrected PR head before claiming CI success.

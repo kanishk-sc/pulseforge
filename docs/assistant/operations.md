@@ -7,6 +7,10 @@ checkpoints; never use `docker compose down -v` to set up the assistant. The
 and the existing `postgres-data` volume. Check the database before/after any image
 change with `docker compose exec -T postgres psql -U pulseforge -d pulseforge -Atc
 "SELECT current_setting('server_version'), count(*) FROM stream_events GROUP BY 1"`.
+The Compose MinIO service builds the same pinned release from a SHA-256-verified
+official GitHub asset because its former Quay image became inaccessible to fresh CI
+runners. This does not change or replace `minio-data`; first build downloads a
+110.99 MB binary. Do not remove the volume to troubleshoot registry availability.
 
 ## Optional one-time setup
 
