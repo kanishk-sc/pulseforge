@@ -2,6 +2,8 @@
 
 import argparse
 import json
+import os
+import shlex
 import statistics
 import subprocess
 import sys
@@ -121,7 +123,8 @@ def main() -> int:
         "execution_mode": "offline",
         "provider": None,
         "provider_model": None,
-        "exact_command": " ".join(sys.argv),
+        "exact_command": os.environ.get("PULSEFORGE_EVAL_COMMAND")
+        or shlex.join([sys.executable, *sys.argv]),
         "retrieval": {
             "scored_cases": len(scored),
             "unscored_no_relevant_section": len(results) - len(scored),
