@@ -77,7 +77,7 @@ jobs:
         run: docker compose --profile analytics --profile airflow down
   product-integration:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
       - uses: astral-sh/setup-uv@v8.0.0
@@ -89,6 +89,11 @@ jobs:
       - run: docker compose config --quiet
       - run: docker compose up -d --wait --wait-timeout 120 postgres
       - run: docker compose --profile product run --rm --build product-migrate
+      - name: Prepare versioned assistant corpus with local embeddings
+        run: |
+          uv run python -m pulseforge.assistant.cli migrate
+          uv run python -m pulseforge.assistant.cli download-model
+          uv run python -m pulseforge.assistant.cli ingest
       - name: Seed deterministic anomaly
         id: seed
         shell: bash
@@ -109,6 +114,10 @@ jobs:
       - run: docker compose --profile product up -d --build --wait --wait-timeout 180 redis api dashboard
       - name: Verify PostgreSQL to API incident flow
         run: uv run pytest -vv tests/test_product_integration.py --run-integration --run-product --junitxml=product-results.xml
+      - name: Verify pgvector retrieval and offline incident explanation
+        run: |
+          uv run pytest -vv tests/test_assistant_integration.py --run-integration --run-assistant --junitxml=assistant-results.xml
+          uv run python scripts/evaluate_assistant.py --split all --output phase6-ci-eval.json
       - name: Verify live observability stack
         env:
           OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318

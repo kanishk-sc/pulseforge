@@ -3,7 +3,9 @@ import {
   DashboardData,
   Incident,
   IncidentDetail,
+  Explanation,
   Region,
+  explainIncident,
   loadDashboard,
   loadIncident,
 } from "./api";
@@ -134,6 +136,31 @@ function IncidentList({
   );
 }
 
+function ExplanationPanel({ explanation }: { explanation: Explanation }) {
+  const citationIndex = new Map(explanation.citations.map((item, index) => [item.citation_id, index + 1]));
+  const sections = [
+    ["Observed facts", explanation.facts],
+    ["Supported interpretation", explanation.interpretations],
+    ["Hypotheses to investigate", explanation.hypotheses],
+    ["Diagnostic steps", explanation.diagnostic_steps],
+    ["Missing or stale evidence", explanation.limitations],
+  ] as const;
+  return (
+    <div className="explanation" aria-live="polite">
+      <div className="explanation-heading"><h4>Incident explanation</h4><span className="offline-label">{explanation.label}</span></div>
+      <p className="explanation-meta">Original build <code>{explanation.analytics_build_id}</code> · Published {explanation.original_build_published_at ? `${utc.format(new Date(explanation.original_build_published_at))} UTC` : "unavailable"} · Retrieved by {explanation.retrieval_mode.replaceAll("_", " ")} · Generated {utc.format(new Date(explanation.generated_at))} UTC</p>
+      <p className="explanation-meta">Current build: {explanation.current_build_id ? <><code>{explanation.current_build_id}</code> · Published {explanation.current_build_published_at ? `${utc.format(new Date(explanation.current_build_published_at))} UTC` : "unavailable"}</> : "unavailable"} · Source references shown: {explanation.source_references_included} of {explanation.source_reference_count}</p>
+      {sections.map(([title, statements]) => (
+        <section key={title} aria-label={title}>
+          <h5>{title}</h5>
+          {statements.length ? <ul>{statements.map((item, index) => <li key={`${title}-${index}`}>{item.text}{" "}{item.citation_ids.map((id) => <a key={id} href={`#assistant-source-${citationIndex.get(id)}`} aria-label={`Source ${citationIndex.get(id)}`}>[{citationIndex.get(id)}]</a>)}</li>)}</ul> : <p>No supported {title.toLowerCase()} to report.</p>}
+        </section>
+      ))}
+      <section aria-label="Explanation sources"><h5>Sources supplied to this explanation</h5><ol className="explanation-sources">{explanation.citations.map((item, index) => <li id={`assistant-source-${index + 1}`} key={item.citation_id}><strong>{item.label}</strong> <code>{item.citation_id}</code>{item.source_path && <span> · {item.source_path}{item.section_id ? ` # ${item.section_id}` : ""}</span>}{item.document_version && <small>Document SHA-256: {item.document_version}</small>}{item.excerpt && <blockquote>{item.excerpt}</blockquote>}</li>)}</ol></section>
+    </div>
+  );
+}
+
 export default function App() {
   const [view, setView] = useState<View>("overview");
   const [region, setRegion] = useState<Region | "all">("all");
@@ -144,6 +171,10 @@ export default function App() {
   const [revision, setRevision] = useState(0);
   const [selected, setSelected] = useState<IncidentDetail | null>(null);
   const detailController = useRef<AbortController | null>(null);
+  const explainController = useRef<AbortController | null>(null);
+  const [explanation, setExplanation] = useState<Explanation | null>(null);
+  const [explainState, setExplainState] = useState<"idle" | "loading" | "error">("idle");
+  const [explainError, setExplainError] = useState("");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -153,6 +184,9 @@ export default function App() {
     setData(null);
     setSelected(null);
     detailController.current?.abort();
+    explainController.current?.abort();
+    setExplanation(null);
+    setExplainState("idle");
     const refresh = async () => {
       try {
         const result = await loadDashboard(hours, region, controller.signal);
@@ -177,6 +211,9 @@ export default function App() {
 
   const selectIncident = useCallback(async (incident: Incident) => {
     detailController.current?.abort();
+    explainController.current?.abort();
+    setExplanation(null);
+    setExplainState("idle");
     const controller = new AbortController();
     detailController.current = controller;
     setView("incidents");
@@ -190,6 +227,40 @@ export default function App() {
   }, []);
 
   useEffect(() => () => detailController.current?.abort(), []);
+  useEffect(() => () => explainController.current?.abort(), []);
+  useEffect(() => {
+    if (view !== "incidents") {
+      explainController.current?.abort();
+      setExplainState("idle");
+    }
+  }, [view]);
+
+  const cancelExplanation = useCallback(() => {
+    explainController.current?.abort();
+    setExplainState("idle");
+  }, []);
+
+  const requestExplanation = useCallback(async () => {
+    if (!selected) return;
+    explainController.current?.abort();
+    const controller = new AbortController();
+    explainController.current = controller;
+    setExplanation(null);
+    setExplainError("");
+    setExplainState("loading");
+    try {
+      const result = await explainIncident(selected.incident_id, controller.signal);
+      if (result.incident_id !== selected.incident_id || result.analytics_build_id !== selected.analytics_build_id) {
+        throw new Error("explanation evidence build mismatch");
+      }
+      setExplanation(result);
+      setExplainState("idle");
+    } catch (reason) {
+      if (controller.signal.aborted || (reason as Error).name === "AbortError") return;
+      setExplainError((reason as Error).message);
+      setExplainState("error");
+    }
+  }, [selected]);
 
   const totals = useMemo(
     () =>
@@ -297,7 +368,7 @@ export default function App() {
               <section className="incident-layout">
                 <div className="panel"><header><div><h2>Detector incidents</h2><p>Stale or incomplete builds are never classified as business anomalies.</p></div></header><IncidentList incidents={data.incidents} onSelect={selectIncident} /></div>
                 <div className="panel detail"><header><div><h2>Evidence detail</h2><p>Source lineage retained with every finding.</p></div></header>
-                  {selected ? <><h3>{selected.summary}</h3><dl><div><dt>Observed</dt><dd>{selected.observed_metric}{selected.observed_denominator ? ` / ${selected.observed_denominator}` : ""}</dd></div><div><dt>Baseline</dt><dd>{selected.baseline_metric}</dd></div><div><dt>Threshold</dt><dd>{selected.threshold}</dd></div><div><dt>Build</dt><dd><code>{selected.analytics_build_id.slice(0, 8)}</code></dd></div></dl><h4>Source events</h4>{selected.evidence.length ? <ul className="evidence">{selected.evidence.map((item) => <li key={`${item.source_event_id}-${item.evidence_role}`}><code>{item.source_event_id}</code><span>{item.evidence_role}</span><time>{utc.format(new Date(item.event_ts))} UTC</time></li>)}</ul> : <Empty>No source events were eligible for this finding.</Empty>}</> : <Empty>Select an incident to inspect its threshold and source events.</Empty>}
+                  {selected ? <><h3>{selected.summary}</h3><dl><div><dt>Observed</dt><dd>{selected.observed_metric}{selected.observed_denominator ? ` / ${selected.observed_denominator}` : ""}</dd></div><div><dt>Baseline</dt><dd>{selected.baseline_metric}</dd></div><div><dt>Threshold</dt><dd>{selected.threshold}</dd></div><div><dt>Build</dt><dd><code>{selected.analytics_build_id.slice(0, 8)}</code></dd></div></dl><h4>Source events</h4>{selected.evidence.length ? <ul className="evidence">{selected.evidence.map((item) => <li key={`${item.source_event_id}-${item.evidence_role}`}><code>{item.source_event_id}</code><span>{item.evidence_role}</span><time>{utc.format(new Date(item.event_ts))} UTC</time></li>)}</ul> : <Empty>No source events were eligible for this finding.</Empty>}<div className="explain-action"><button onClick={() => void requestExplanation()} disabled={explainState === "loading"}>Explain this incident</button>{explainState === "loading" && <><span role="status">Building offline evidence summary…</span><button onClick={cancelExplanation}>Cancel explanation</button></>}</div>{explainState === "error" && <div className="banner error" role="alert">Explanation unavailable: {explainError}. <button onClick={() => void requestExplanation()}>Retry explanation</button></div>}{explanation && <ExplanationPanel explanation={explanation} />}</> : <Empty>Select an incident to inspect its threshold and source events.</Empty>}
                 </div>
               </section>
             )}

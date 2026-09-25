@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     analytics_max_range_days: int = Field(default=31, ge=1, le=366)
     otel_exporter_otlp_endpoint: str | None = None
     otel_trace_sample_ratio: float = Field(default=0.1, ge=0, le=1)
+    assistant_model_cache_dir: str = ".cache/pulseforge-model"
+    assistant_provider: str = "disabled"
+    assistant_provider_model: str = ""
+    assistant_provider_key: SecretStr = SecretStr("")
 
     @property
     def database_url(self) -> URL:

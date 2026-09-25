@@ -17,6 +17,9 @@ x-app: &app
     REDIS_URL: redis://redis:6379/0
     ANALYTICS_CACHE_TTL_SECONDS: ${ANALYTICS_CACHE_TTL_SECONDS:-60}
     ANALYTICS_STALE_AFTER_SECONDS: ${ANALYTICS_STALE_AFTER_SECONDS:-7200}
+    ASSISTANT_PROVIDER: ${ASSISTANT_PROVIDER:-disabled}
+    ASSISTANT_PROVIDER_MODEL: ${ASSISTANT_PROVIDER_MODEL:-}
+    ASSISTANT_PROVIDER_KEY: ${ASSISTANT_PROVIDER_KEY:-}
     OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
     OTEL_TRACE_SAMPLE_RATIO: ${OTEL_TRACE_SAMPLE_RATIO:-0.1}
   init: true
@@ -35,7 +38,8 @@ services:
     restart: unless-stopped
 
   postgres:
-    image: postgres:16.9-bookworm
+    # pgvector's Postgres 16 Bookworm image keeps the existing data volume and major version.
+    image: pgvector/pgvector:0.8.6-pg16-bookworm
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-pulseforge}
       POSTGRES_DB: ${POSTGRES_DB:-pulseforge}
@@ -104,6 +108,7 @@ services:
   api:
     <<: *app
     ports: ["127.0.0.1:8000:8000"]
+    volumes: ["./.cache/pulseforge-model:/app/.cache/pulseforge-model:ro"]
     depends_on:
       postgres: {condition: service_healthy}
       bootstrap: {condition: service_completed_successfully}

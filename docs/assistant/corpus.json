@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "documents": [
+    {"id": "operations-runbooks", "title": "Local operations runbooks", "topic": "operations", "path": "docs/operations/runbooks.md"},
+    {"id": "product-design", "title": "Phase 4 product and detector design", "topic": "business-incidents", "path": "docs/architecture/phase-4-design.md"},
+    {"id": "reliability-design", "title": "Phase 5 observability and reliability design", "topic": "telemetry", "path": "docs/architecture/phase-5-design.md"}
+  ]
+}
