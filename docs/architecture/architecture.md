@@ -150,10 +150,17 @@ window exclusion and a six-hour cooldown. Incidents persist observed values, bas
 thresholds, build identity and source evidence transactionally. Stale publications are
 not classified. Payment failures, shipment delays, refund spikes and order-volume drops
 are deterministic versioned rules, and a finite time-driven check can detect absence.
-The AI assistant will retrieve this evidence and runbooks; it must not invent a cause
-from correlation or act as the primary detector. Answers will distinguish observation,
-hypothesis and recommended investigation. Offline mode remains a labeled evidence
-summary, and future evaluations will report only executed measurements.
+The Phase 6 assistant reads an existing incident, its original successful build and
+bounded source references through fixed read-only queries. A separate `assistant`
+schema stores allowlisted, versioned operational Markdown chunks and pinned local
+embeddings. PostgreSQL pgvector plus bounded full-text rank fusion retrieves sections;
+missing model assets cause a labeled lexical fallback. The deterministic offline
+response distinguishes observations, supported interpretation, unproven hypotheses,
+diagnostic steps and missing/stale evidence, with invocation-checked citations.
+Optional OpenAI Responses integration is disabled by default and has no tools.
+Citation validity does not prove semantic grounding, and no model becomes a detector
+or remediator. See [Phase 6 design](phase-6-design.md) and the measured
+[evaluation report](../assistant/evaluation.md).
 
 ## Scale and deployment gate
 

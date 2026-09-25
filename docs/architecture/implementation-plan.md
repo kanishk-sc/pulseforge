@@ -65,12 +65,18 @@ Local Phase 5 evidence is in [verification](../verification.md) and the
 [bounded measurement report](../benchmarks/phase5-report.md). Hosted PR checks are
 tracked separately by GitHub Actions; these local results are not production SLAs.
 
-## 6. AI operations
-- [ ] Operational runbooks, ingestion, embeddings and pgvector retrieval
-- [ ] Context includes runbooks, incidents, metrics and pipeline metadata
-- [ ] Provider interface, optional real provider and honest offline evidence summary
-- [ ] At least 30 evaluation cases with relevance, grounding, identification and latency
-- [ ] Persist actual evaluation output; separate automated proxies from human judgments
+## 6. Evidence-bound AI operations
+- [x] Allowlisted versioned runbooks, finite ingestion, pinned local embeddings and real pgvector retrieval
+- [x] Bounded typed original-build incident evidence, current publication status labeled separately
+- [x] Clearly labeled offline evidence summary in the API and existing React incident detail
+- [x] Disabled-by-default provider interface and real OpenAI Responses adapter with mocked failure-contract tests
+- [x] 32 pre-tuning development/held-out cases and machine-readable offline retrieval results
+- [ ] Live provider inference and semantic grounding/usefulness human review (requires separate authorization/review)
+
+The checked items describe local implementation and offline evidence only. A passing
+mocked adapter test does not establish live provider compatibility or model quality.
+See [Phase 6 design](phase-6-design.md), [evaluation rubric](../assistant/evaluation.md)
+and [verification](../verification.md).
 
 ## 7. Deployment engineering — gated on working local platform
 - [ ] Kubernetes deployments/services/config/probes/resources for owned services

@@ -655,3 +655,39 @@ review smokes do not replace them. Local Tempo still runs as root on a named vol
 and has time retention but no hard byte cap—acceptable for this optional,
 localhost-bound development stack, not a production posture. Required hosted checks
 and mergeability must be confirmed on the exact final pushed head before merging.
+
+## Phase 6 local evidence (2026-09-24–25)
+
+The Phase 6 branch adds a separate pgvector-backed `assistant` schema and read-only
+incident explanation route. It does not modify Spark checkpoints, Airflow orchestration,
+dbt models, product publication, or incident detectors. The existing PostgreSQL 16
+named volume was retained while changing to the official pgvector PostgreSQL 16 image.
+Before and after image recreation, the database held 918 stream events, two incidents
+and 16 analytics builds. After migration and indexing it held three allowlisted
+documents and 24 assistant chunks; `vector` extension version was 0.8.6.
+
+| Exact command | Observed result |
+| --- | --- |
+| `uv run --isolated pytest -q -m 'not integration and not spark' --basetemp .pytest_cache/phase6-unit-final` | 118 passed, 35 deselected; two upstream Starlette deprecation warnings. |
+| `uv run --isolated ruff format --check .`; `uv run --isolated ruff check .`; `uv lock --check`; `git diff --check` | Format check: 101 files already formatted; Ruff lint passed; lock resolved 84 packages; diff whitespace check passed. The last format correction was in corpus hashing. |
+| `uv run --isolated pytest -q tests/test_assistant.py tests/test_assistant_provider.py --basetemp .pytest_cache/phase6-assistant-unit-final` | 11 passed after the final corpus metadata fix; provider tests use mocked HTTP only. |
+| `npm test -- --run`; `npm run typecheck`; `npm run build` (in `frontend`) | 8 tests passed in two files; typecheck and Vite production build passed. New tests cover cancellation and explanation-error containment. |
+| `uv run --isolated pytest -q tests/test_assistant_integration.py --run-integration --run-assistant --basetemp .pytest_cache/phase6-assistant-metadata` | 4 passed against populated PostgreSQL/pgvector: real embeddings and retrieval, changed/deleted corpus reconciliation, metadata-only updates without re-embedding, model reindex guard, and offline API evidence consistency. |
+| `docker compose --profile product build api dashboard` with `DOCKER_BUILDKIT=0`, `COMPOSE_BAKE=false`; `docker compose --profile product up -d --no-deps --force-recreate --wait --wait-timeout 180 api dashboard` | Both images built and services became healthy. The legacy builder was used because BuildKit on this OneDrive checkout returned `invalid file request`; this was a local packaging issue, not a code test failure. |
+| `Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/api/v1/incidents/$id/explanation" -ContentType 'application/json' -Body '{"mode":"offline"}' -TimeoutSec 30` | HTTP 200 for incident `4a1791b0-5222-4622-98bf-a8fe15aff83c`: semantic retrieval, original build `7a8dceed-7f77-44eb-b275-0f42a253c629`, distinct current build `f99f82d4-d5c9-42b6-a392-81cf671d1623`, 15 facts, 20 citations and 5 limitations. Same endpoint with `{"mode":"provider"}` returned controlled HTTP 503 while disabled. |
+| `uv run --isolated pytest -q tests/test_product_integration.py --run-integration --run-product --basetemp .pytest_cache/phase6-product-final` | 6 passed against the populated product database and live API. |
+| `docker compose --profile analytics run --rm analytics-dbt test` | 94 data tests plus hook passed: PASS=95, WARN=0, ERROR=0, SKIP=0. |
+| `docker compose --profile airflow run --rm --no-deps airflow python /opt/pulseforge/scripts/verify_airflow_dag.py` | Zero import errors; finite tasks were `verify_warehouse`, `dbt_build`, `quality_summary`. |
+| `uv run --isolated pytest -q -m analytics --run-integration --run-analytics --basetemp .pytest_cache/phase6-analytics-resume` | 4 passed, 149 deselected; the first attempt was interrupted before a final result and is not counted. |
+| `docker compose --profile streaming up -d --no-build --wait --wait-timeout 240`; `uv run --isolated pytest -q -m integration --run-integration --run-streaming --basetemp .pytest_cache/phase6-streaming-final` | Streaming became healthy; 15 passed, 13 skipped, 125 deselected in 272.92 seconds, including replay/checkpoint and sink recovery coverage. |
+| `uv run --isolated python scripts/evaluate_assistant.py --split all --output .pytest_cache/phase6-precommit-eval.json` | 32 cases; recall@4 was 24/25 scored cases (0.96). Exact numeric values and source-event membership passed for one real offline incident. The precommit report records a dirty working tree and is superseded by the committed report. |
+| `uv run --isolated python -m pulseforge.assistant.cli ingest` | After the metadata fix: zero updated documents, zero embedded chunks, three documents and 24 chunks retained; corpus SHA-256 `7bb946f4bc5b3b43e6a8fe5ad03762766054efdf2c090a158180c5da7f2650ff`. |
+| `npx agent-browser --session pulseforge-phase6 open http://127.0.0.1:5173` followed by `snapshot -i`, incident and **Explain this incident** clicks, `snapshot -i`, screenshot | Real browser loaded the live dashboard and explanation only after the click. It showed the offline label, original/current build IDs, facts, limitations, and citation anchors. Full-page screenshot was inspected locally, not committed. |
+
+The 32-case retrieval report is not a 32-case incident-behavior evaluation: seven
+cases have no labeled relevant section, and scenario-specific behavioral checks lack
+matching persisted incident fixtures. Human claim-level grounding has not been
+scored. Provider transport tests are mocked; no live provider inference or external
+incident/runbook transmission was authorized. See
+[evaluation](assistant/evaluation.md) for rubric and measured report. The API remains
+unauthenticated and bound to localhost; it must not be exposed publicly.
