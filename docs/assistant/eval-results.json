@@ -1,6 +1,6 @@
 {
-  "evaluated_at": "2026-09-25T19:29:47.198383+00:00",
-  "tested_commit": "26f7dceb5ed3fe7eb93276bb425678fde1a5ae4e",
+  "evaluated_at": "2026-09-26T05:38:46.814482+00:00",
+  "tested_commit": "94b884af0ed6007f2f5b6ebe6b68f08abfadf42d",
   "working_tree_dirty": false,
   "dataset_version": "22b9530e3a4e66ce702aa80ab9aa64de67c8e02ea87c614690abe11ede4496dd",
   "dataset_cases": 32,
@@ -11,7 +11,7 @@
   "execution_mode": "offline",
   "provider": null,
   "provider_model": null,
-  "exact_command": "uv run --isolated python scripts/evaluate_assistant.py --split all --output docs/assistant/eval-results.json",
+  "exact_command": "'C:\\Users\\kanis\\AppData\\Local\\uv\\cache\\builds-v0\\.tmpmy8AWJ\\Scripts\\python.exe' scripts/evaluate_assistant.py --split all --output docs/assistant/eval-results.json",
   "retrieval": {
     "scored_cases": 25,
     "unscored_no_relevant_section": 7,
@@ -20,8 +20,8 @@
       "dev": 1.0,
       "heldout": 0.9090909090909091
     },
-    "latency_p50_ms": 18.271,
-    "latency_p95_ms": 22.517,
+    "latency_p50_ms": 13.241,
+    "latency_p95_ms": 18.683,
     "cases": [
       {
         "id": "dev-01",
@@ -41,7 +41,7 @@
           "product-design:deterministic-detectors-1:0"
         ],
         "recall_at_4": 1.0,
-        "latency_ms": 34.478,
+        "latency_ms": 24.406,
         "behavioral_case_status": "not_executed_without_matching_incident_fixture"
       },
       {
@@ -62,7 +62,7 @@
           "product-design:product-schema-1:0"
         ],
         "recall_at_4": 1.0,
-        "latency_ms": 19.765,
+        "latency_ms": 13.165,
         "behavioral_case_status": "not_executed_without_matching_incident_fixture"
       },
       {
@@ -83,7 +83,7 @@
           "product-design:deterministic-acceptance-fixture-1:0"
         ],
         "recall_at_4": 1.0,
-        "latency_ms": 19.229,
+        "latency_ms": 12.518,
         "behavioral_case_status": "not_executed_without_matching_incident_fixture"
       },
       {
@@ -104,7 +104,7 @@
           "product-design:deterministic-detectors-1:0"
         ],
         "recall_at_4": 1.0,
-        "latency_ms": 17.368,
+        "latency_ms": 12.15,
         "behavioral_case_status": "not_executed_without_matching_incident_fixture"
       },
       {
@@ -125,7 +125,7 @@
           "product-design:product-schema-1:0"
         ],
         "recall_at_4": 1.0,
-        "latency_ms": 18.098,
+        "latency_ms": 12.217,
         "behavioral_case_status": "not_executed_without_matching_incident_fixture"
       },
       {
@@ -146,7 +146,7 @@
           "product-design:versioned-api-contract-1:0"
         ],
         "recall_at_4": 1.0,
-        "latency_ms": 22.517,
+        "latency_ms": 14.279,
         "behavioral_case_status": "not_executed_without_matching_incident_fixture"
       },
       {
@@ -167,7 +167,7 @@
           "product-design:deterministic-detectors-1:0"
         ],
         "recall_at_4": 1.0,
-        "latency_ms": 22.323,
+        "latency_ms": 14.103,
         "behavioral_case_status": "not_executed_without_matching_incident_fixture"
       },
       {
@@ -188,7 +188,7 @@
           "product-design:deterministic-detectors-1:0"
         ],
         "recall_at_4": 1.0,
-        "latency_ms": 21.174,
+        "latency_ms": 13.674,
         "behavioral_case_status": "not_executed_without_matching_incident_fixture"
       },
       {
@@ -209,7 +209,7 @@
           "product-design:atomic-publication-and-freshness-1:0"
         ],
         "recall_at_4": 1.0,
-        "latency_ms": 21.628,
+        "latency_ms": 12.277,
         "behavioral_case_status": "not_executed_without_matching_incident_fixture"
       },
       {
@@ -230,7 +230,7 @@
           "product-design:atomic-publication-and-freshness-1:0"
         ],
         "recall_at_4": 1.0,
-        "latency_ms": 18.057,
+        "latency_ms": 13.465,
         "behavioral_case_status": "not_executed_without_matching_incident_fixture"
       },
       {
@@ -251,7 +251,7 @@
           "operations-runbooks:triage-and-safe-recovery-1:0"
         ],
         "recall_at_4": 1.0,
-        "latency_ms": 17.417,
+        "latency_ms": 11.495,
         "behavioral_case_status": "not_executed_without_matching_incident_fixture"
       },
       {
@@ -272,7 +272,7 @@
           "operations-runbooks:bounded-failure-drills-1:0"
         ],
         "recall_at_4": 1.0,
-        "latency_ms": 23.905,
+        "latency_ms": 13.621,
         "behavioral_case_status": "not_executed_without_matching_incident_fixture"
       },
       {
@@ -293,7 +293,7 @@
           "operations-runbooks:what-each-signal-proves-1:0"
         ],
         "recall_at_4": 1.0,
-        "latency_ms": 17.541,
+        "latency_ms": 12.741,
         "behavioral_case_status": "not_executed_without_matching_incident_fixture"
       },
       {
@@ -314,7 +314,7 @@
           "reliability-design:alerts-and-interpretation-1:0"
         ],
         "recall_at_4": 1.0,
-        "latency_ms": 16.342,
+        "latency_ms": 12.067,
         "behavioral_case_status": "not_executed_without_matching_incident_fixture"
       },
       {
@@ -331,8 +331,9 @@
         ],
         "hits": [],
         "recall_at_4": null,
-        "latency_ms": 13.027,
-        "behavioral_case_status": "not_executed_without_matching_incident_fixture"
+        "latency_ms": 11.836,
+        "behavioral_case_status": "not_executed_without_matching_incident_fixture",
+        "safe_output_status": "question_rejected_422"
       },
       {
         "id": "dev-16",
@@ -348,8 +349,9 @@
         ],
         "hits": [],
         "recall_at_4": null,
-        "latency_ms": 20.36,
-        "behavioral_case_status": "not_executed_without_matching_incident_fixture"
+        "latency_ms": 14.132,
+        "behavioral_case_status": "not_executed_without_matching_incident_fixture",
+        "safe_output_status": "question_rejected_422"
       },
       {
         "id": "held-01",
@@ -369,7 +371,7 @@
           "product-design:deterministic-detectors-1:0"
         ],
         "recall_at_4": 1.0,
-        "latency_ms": 20.56,
+        "latency_ms": 12.909,
         "behavioral_case_status": "not_executed_without_matching_incident_fixture"
       },
       {
@@ -390,7 +392,7 @@
           "product-design:versioned-api-contract-1:0"
         ],
         "recall_at_4": 1.0,
-        "latency_ms": 16.945,
+        "latency_ms": 16.693,
         "behavioral_case_status": "not_executed_without_matching_incident_fixture"
       },
       {
@@ -411,7 +413,7 @@
           "product-design:versioned-api-contract-1:0"
         ],
         "recall_at_4": 1.0,
-        "latency_ms": 17.378,
+        "latency_ms": 17.858,
         "behavioral_case_status": "not_executed_without_matching_incident_fixture"
       },
       {
@@ -432,7 +434,7 @@
           "product-design:product-schema-1:0"
         ],
         "recall_at_4": 1.0,
-        "latency_ms": 17.977,
+        "latency_ms": 15.292,
         "behavioral_case_status": "not_executed_without_matching_incident_fixture"
       },
       {
@@ -453,7 +455,7 @@
           "product-design:versioned-api-contract-1:0"
         ],
         "recall_at_4": 1.0,
-        "latency_ms": 18.271,
+        "latency_ms": 15.384,
         "behavioral_case_status": "not_executed_without_matching_incident_fixture"
       },
       {
@@ -474,7 +476,7 @@
           "product-design:deterministic-detectors-1:0"
         ],
         "recall_at_4": 1.0,
-        "latency_ms": 16.895,
+        "latency_ms": 19.23,
         "behavioral_case_status": "not_executed_without_matching_incident_fixture"
       },
       {
@@ -495,7 +497,7 @@
           "product-design:atomic-publication-and-freshness-1:0"
         ],
         "recall_at_4": 1.0,
-        "latency_ms": 21.28,
+        "latency_ms": 18.683,
         "behavioral_case_status": "not_executed_without_matching_incident_fixture"
       },
       {
@@ -516,7 +518,7 @@
           "product-design:product-schema-1:0"
         ],
         "recall_at_4": 1.0,
-        "latency_ms": 21.995,
+        "latency_ms": 16.326,
         "behavioral_case_status": "not_executed_without_matching_incident_fixture"
       },
       {
@@ -537,7 +539,7 @@
           "operations-runbooks:what-each-signal-proves-1:0"
         ],
         "recall_at_4": 1.0,
-        "latency_ms": 20.619,
+        "latency_ms": 13.769,
         "behavioral_case_status": "not_executed_without_matching_incident_fixture"
       },
       {
@@ -558,7 +560,7 @@
           "reliability-design:alerts-and-interpretation-1:0"
         ],
         "recall_at_4": 1.0,
-        "latency_ms": 19.868,
+        "latency_ms": 13.789,
         "behavioral_case_status": "not_executed_without_matching_incident_fixture"
       },
       {
@@ -577,7 +579,7 @@
         ],
         "hits": [],
         "recall_at_4": 0.0,
-        "latency_ms": 17.815,
+        "latency_ms": 13.241,
         "behavioral_case_status": "not_executed_without_matching_incident_fixture"
       },
       {
@@ -594,8 +596,9 @@
         ],
         "hits": [],
         "recall_at_4": null,
-        "latency_ms": 18.735,
-        "behavioral_case_status": "not_executed_without_matching_incident_fixture"
+        "latency_ms": 12.956,
+        "behavioral_case_status": "not_executed_without_matching_incident_fixture",
+        "safe_output_status": "question_rejected_422"
       },
       {
         "id": "held-13",
@@ -611,8 +614,9 @@
         ],
         "hits": [],
         "recall_at_4": null,
-        "latency_ms": 21.144,
-        "behavioral_case_status": "not_executed_without_matching_incident_fixture"
+        "latency_ms": 12.164,
+        "behavioral_case_status": "not_executed_without_matching_incident_fixture",
+        "safe_output_status": "question_rejected_422"
       },
       {
         "id": "held-14",
@@ -628,8 +632,9 @@
         ],
         "hits": [],
         "recall_at_4": null,
-        "latency_ms": 15.673,
-        "behavioral_case_status": "not_executed_without_matching_incident_fixture"
+        "latency_ms": 11.298,
+        "behavioral_case_status": "not_executed_without_matching_incident_fixture",
+        "safe_output_status": "question_rejected_422"
       },
       {
         "id": "held-15",
@@ -645,8 +650,9 @@
         ],
         "hits": [],
         "recall_at_4": null,
-        "latency_ms": 16.621,
-        "behavioral_case_status": "not_executed_without_matching_incident_fixture"
+        "latency_ms": 12.861,
+        "behavioral_case_status": "not_executed_without_matching_incident_fixture",
+        "safe_output_status": "question_rejected_422"
       },
       {
         "id": "held-16",
@@ -662,8 +668,9 @@
         ],
         "hits": [],
         "recall_at_4": null,
-        "latency_ms": 17.277,
-        "behavioral_case_status": "not_executed_without_matching_incident_fixture"
+        "latency_ms": 11.875,
+        "behavioral_case_status": "not_executed_without_matching_incident_fixture",
+        "safe_output_status": "question_rejected_422"
       }
     ]
   },
@@ -676,8 +683,14 @@
     "event_reference_consistency": true,
     "abstains_from_root_cause": true,
     "retrieval_mode": "semantic",
-    "latency_ms": 3391.221,
+    "latency_ms": 3250.906,
     "token_usage": null
+  },
+  "no_relevant_section_safety": {
+    "method": "actual API rejects unsupported question field; retrieval queries are evaluation-only",
+    "cases_checked": 7,
+    "all_rejected_422": true,
+    "not_a_relevance_or_semantic_grounding_score": true
   },
   "semantic_grounding_rubric": {
     "status": "not_human_reviewed",
@@ -690,5 +703,5 @@
     "score": null
   },
   "live_provider_evaluation": "unverified_not_authorized",
-  "elapsed_seconds": 7.212
+  "elapsed_seconds": 7.11
 }
