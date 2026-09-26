@@ -40,8 +40,9 @@ were used to choose bounded semantic/full-text rank fusion. The held-out cases w
 not used for that choice. The recorded outcome is 14/14 development and 10/11
 original held-out relevant sections retrieved in the top four (24/25 overall, 0.96
 mean case recall@4). The original held-out result is historical and review-exposed.
-The fresh review holdout retrieved 7/7 labeled relevant sections; one no-relevant case
-was excluded from recall and its unsupported question was rejected with HTTP 422.
+The fresh review holdout [report](eval-review-holdout-results.json) retrieved 7/7
+labeled relevant sections; one no-relevant case was excluded from recall and its
+unsupported question was rejected with HTTP 422.
 This is retrieval relevance on a small synthetic corpus, not business-incident
 grounding, a general abstention metric, or a production-quality estimate.
 
