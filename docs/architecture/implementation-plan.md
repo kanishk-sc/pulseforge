@@ -70,7 +70,7 @@ tracked separately by GitHub Actions; these local results are not production SLA
 - [x] Bounded typed original-build incident evidence, current publication status labeled separately
 - [x] Clearly labeled offline evidence summary in the API and existing React incident detail
 - [x] Disabled-by-default provider interface and real OpenAI Responses adapter with mocked failure-contract tests
-- [x] 32 pre-tuning development/held-out cases and machine-readable offline retrieval results
+- [x] 32 original retrieval cases and a fresh eight-case review holdout with machine-readable offline results; the original held-out split became review-exposed
 - [ ] Live provider inference and semantic grounding/usefulness human review (requires separate authorization/review)
 
 The checked items describe local implementation and offline evidence only. A passing

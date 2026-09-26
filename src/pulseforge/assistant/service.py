@@ -283,15 +283,24 @@ def explain_offline(settings: Settings, incident_id: UUID) -> Explanation:
         )
         steps.append(
             Statement(
-                text=f"Review {chunk['title']}, section “{chunk['section_title']}”, "
-                "and check its applicable diagnostics before taking action.",
+                text=f"Candidate context: review {chunk['title']}, section "
+                f"“{chunk['section_title']}”. Applicability to this incident "
+                "is not established by retrieval rank.",
                 citation_ids=[reference],
+            )
+        )
+    if chunks:
+        limitations.append(
+            Statement(
+                text="Retrieved runbook sections are candidates, not verified diagnoses "
+                "or evidence that a suggested action will help.",
+                citation_ids=[incident_ref],
             )
         )
     if not chunks:
         limitations.append(
             Statement(
-                text="No relevant indexed runbook section was found.",
+                text="No indexed runbook section was returned.",
                 citation_ids=[incident_ref],
             )
         )

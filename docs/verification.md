@@ -725,3 +725,65 @@ observability jobs all passed. The local post-repair command
 `uv run --isolated pytest -q -m integration --run-integration --run-streaming --basetemp .pytest_cache/phase6-streaming-minio-final`
 also passed: 15 passed, 14 skipped, 125 deselected in 267.54 seconds. A later
 documentation-only commit does not inherit CI status; its own checks must finish.
+
+## PR #6 review evidence — 2026-09-25
+
+The review kept the Phase 1–5 ingestion, publication, detector, and telemetry code
+unchanged. It found two material verification gaps: substring-based numeric scoring
+could pass an inexact observation, and the original seven no-relevant-section cases
+had no asserted safe output. The evaluator now checks the entire persisted numeric
+fact and requires HTTP 422 when each retrieval-only query is submitted as an
+unsupported API `question`. The API has no free-form question endpoint. This is a
+safe input boundary, **not** proof that semantic retrieval recognizes irrelevant
+queries. A disposable PostgreSQL test database adds persisted payment, shipment,
+refund, and order-volume incidents and checks exact numbers, original/current build
+separation, event citations, stale context, causal abstention, a missing original
+projection, and an original build that failed rather than published. It does not
+prove all detector behaviors or immature cohort evaluation. Retrieved runbook
+sections are now labeled candidate context, not verified diagnoses or evidence
+that a suggested action will help.
+
+The original evaluation held-out queries were inspected during this review. Their
+10/11 result is now review-exposed. A fresh eight-case review holdout was authored
+before retrieval scoring, scored once before any reproducibility reruns, and not
+tuned: 7/7 labeled relevant sections
+were retrieved at four; its one no-relevant query received the HTTP 422 safety
+assertion. These are small synthetic retrieval results, not an explanation accuracy
+or human-grounding score. No live provider inference or external incident/runbook
+transmission occurred.
+
+| Exact command or controlled check | Observed result |
+| --- | --- |
+| `$env:UV_LINK_MODE='copy'; uv run --isolated pytest -q tests/test_assistant_integration.py --run-integration --run-assistant --basetemp .pytest_cache/pr6-review-assistant-final2` | 5 passed in 64.71 seconds after the failed-build assertion and candidate-context wording; the new fixture creates and drops a UUID-named disposable database. |
+| `$env:UV_LINK_MODE='copy'; uv run --isolated pytest -q -m 'not integration and not spark' --basetemp .pytest_cache/pr6-review-unit-final` | 118 passed, 37 deselected; two upstream deprecation warnings. Mocked provider failure/contract tests included, no network inference. |
+| `$env:UV_LINK_MODE='copy'; uv run --isolated ruff format --check .`; `uv run --isolated ruff check .`; `uv lock --check`; `uv run --isolated python scripts/export_schema.py --check` | 101 files formatted; lint passed; 84 packages lock-current; version 1 schema matched. An earlier format check failed on the newly added dataset option, corrected before this pass. |
+| `npm test -- --run`; `npm run typecheck`; `npm run build` in `frontend` | 8 tests passed; typecheck and production build passed. |
+| `$env:UV_LINK_MODE='copy'; uv run --isolated python scripts/evaluate_assistant.py --split all --output .pytest_cache/pr6-review-eval.json` | 32 cases; 24/25 recall@4; exact numeric/source checks true; seven no-relevant questions all rejected HTTP 422. Original heldout review-exposed. |
+| `$env:UV_LINK_MODE='copy'; uv run --isolated python scripts/evaluate_assistant.py --dataset docs/assistant/eval-review-holdout.jsonl --split all --output .pytest_cache/pr6-fresh-holdout.json` | Initial scoring run, before any tuning or reproducibility rerun: 7/7 relevant-section hits, one no-relevant query rejected HTTP 422; numeric/source checks true. |
+| `docker compose stop streaming`; `docker compose restart minio`; `docker compose up -d --wait --wait-timeout 180 minio`; `docker compose --profile streaming up -d --no-build --wait --wait-timeout 240 streaming` | MinIO and streaming returned healthy on retained named volume/checkpoints. A Python boto3 S3 GET SHA-256 probe before/after matched five representative nonempty objects: raw and cleaned/curated Parquet, a commit manifest, and a checkpoint commit. This is not a hash audit of all 2,345 objects. |
+| `docker run --rm --entrypoint /bin/sh quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z -c 'sha256sum /usr/bin/minio'`; `docker compose exec -T minio sha256sum /usr/local/bin/minio`; `docker compose build --no-cache minio` | Both binaries hashed to `7c5bd8512c6e966455b1d198209358b2d191c77a83ab377c4073281065fb855f`; fresh build downloaded the exact official release asset and checksum validation printed `OK`. Same release and root runtime user as cached Quay image, not a security upgrade. |
+| `docker compose stop streaming`; `docker compose up -d --no-deps --force-recreate --wait --wait-timeout 180 minio`; `docker compose --profile streaming up -d --no-build --wait --wait-timeout 240 streaming` | After the fresh no-cache build, recreated MinIO on the existing volume. The same five-class boto3 content probe matched SHA-256 before/after; MinIO and checkpoint-owning streaming returned healthy. No volume or checkpoint deletion. |
+| `$env:UV_LINK_MODE='copy'; uv run --isolated pytest -q -m integration --run-integration --run-streaming --basetemp .pytest_cache/pr6-review-streaming` | 15 passed, 15 skipped, 125 deselected after the MinIO restart; includes replay, checkpoint and sink recovery. |
+| `docker compose --profile airflow run --rm --no-deps airflow python -m pulseforge.product.cli pipeline --build-key pr6-review-20260925a --project-dir /opt/pulseforge/analytics --profiles-dir /opt/pulseforge/analytics` | Populated warehouse (984 source rows); dbt PASS=109, WARN=0, ERROR=0, SKIP=0; successful immutable build `404de7a2-035b-4d36-846d-3734b0527a07`, zero new incidents. |
+| `docker compose --profile analytics run --rm analytics-dbt test` | PASS=95, WARN=0, ERROR=0, SKIP=0. |
+| `docker compose --profile airflow run --rm --no-deps airflow python /opt/pulseforge/scripts/verify_airflow_dag.py` | Zero import errors; only finite `verify_warehouse`, `dbt_build`, `quality_summary` tasks. |
+| `$env:UV_LINK_MODE='copy'; uv run --isolated pytest -q -m analytics --run-integration --run-analytics --basetemp .pytest_cache/pr6-review-analytics` | 4 passed, 151 deselected. |
+| `docker compose --profile observability config --quiet`; `docker compose exec -T prometheus promtool check config /etc/prometheus/prometheus.yml`; `docker compose exec -T prometheus promtool test rules /etc/prometheus/alert-tests.yml` | Compose valid, one rule file/seven rules valid, deterministic alert rules passed. |
+| `$env:UV_LINK_MODE='copy'; uv run --isolated python scripts/verify_observability.py` | API/ops/streaming targets up, producer down by design, 984 warehouse rows, four dashboards (6/7/6/5 panels), sampled revenue trace with PostgreSQL and Redis child spans. |
+| `npx agent-browser --session pr6-review open http://127.0.0.1:5173`; click persisted incident; click **Explain this incident**; inspect `.explanation`; click citation 15 | Real browser showed offline label, original build `7a8dceed-7f77-44eb-b275-0f42a253c629`, distinct current build, exact facts, stale/missing context, 12/20 source bound, and displayed citations. Citation click resolved to `#assistant-source-15`. Session closed. Initial unquoted `@e14` PowerShell argument failed; quoted retry succeeded. |
+| `$env:DOCKER_BUILDKIT='0'; $env:COMPOSE_BAKE='false'; docker compose --profile product build api`; `docker compose --profile product up -d --no-deps --force-recreate --wait --wait-timeout 180 api`; `npx agent-browser --session pr6-final open http://127.0.0.1:5173`; keyboard Enter on **Explain this incident**; inspect `.explanation`; click **Source 15** | Rebuilt API image and recreated it healthy. The real browser showed loading/cancel followed by the completed offline explanation with candidate-context wording, distinct original/current builds, exact numbers, limitations and citations. Citation resolved to `http://127.0.0.1:5173/#assistant-source-15` with the corresponding runbook excerpt present. Session closed. A `wait 'text=Incident explanation'` selector timed out, but a subsequent `.explanation` read and citation click succeeded; it is not counted as a successful wait. |
+
+The first product integration invocation reported 6 passing tests but also emitted a
+Windows resource exception during collection. It is retained as noisy evidence,
+not silently treated as clean. A non-concurrent rerun using
+`$env:UV_LINK_MODE='copy'; uv run --isolated pytest -q tests/test_product_integration.py --run-integration --run-product --basetemp .pytest_cache/pr6-review-product-clean`
+passed 6/6 without that exception. The browser flow did not exercise live provider inference. Human
+claim-by-claim grounding and usefulness remain unreviewed. The dated MinIO release
+is a local availability workaround with no security-upgrade claim; the API remains
+unauthenticated and localhost-bound.
+
+A later parallel `uv run --isolated` attempt without `UV_LINK_MODE=copy` failed
+during environment installation on OneDrive (`os error 396`, incompatible
+hardlinks) before format, lint, or schema checks ran. The documented sequential
+rerun with `UV_LINK_MODE=copy` passed all three checks; `uv lock --check` resolved
+84 packages. This environment error is not represented as a source-test failure.

@@ -11,6 +11,7 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
+import httpx
 import psycopg
 
 from pulseforge.assistant.corpus import LocalEmbedder, digest, retrieve
@@ -30,9 +31,10 @@ def percentile(values: list[float], fraction: float) -> float | None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--split", choices=["dev", "heldout", "all"], default="all")
+    parser.add_argument("--dataset", type=Path, default=Path("docs/assistant/eval-cases.jsonl"))
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    dataset = Path("docs/assistant/eval-cases.jsonl")
+    dataset = args.dataset
     cases = [json.loads(line) for line in dataset.read_text(encoding="utf-8").splitlines()]
     selected = [case for case in cases if args.split == "all" or case["split"] == args.split]
     settings = Settings()
@@ -86,15 +88,45 @@ def main() -> int:
     explanation_started = time.perf_counter()
     explanation = validate_citations(explain_offline(settings, incident[0]))
     explanation_ms = round((time.perf_counter() - explanation_started) * 1000, 3)
-    fact_text = " ".join(statement.text for statement in explanation.facts)
-    numeric_fidelity = all(
-        str(value) in fact_text for value in (incident[2], incident[3], incident[4], incident[5])
+    recorded_number_fact = next(
+        (item for item in explanation.facts if item.text.startswith("Observed ")), None
+    )
+    expected_number_fact = (
+        f"Observed {incident[2]}"
+        + (f" with denominator {incident[5]}" if incident[5] is not None else " (count metric)")
+        + f"; recorded baseline {incident[3]} and threshold {incident[4]}."
+    )
+    numeric_fidelity = bool(
+        recorded_number_fact
+        and recorded_number_fact.text == expected_number_fact
+        and f"incident:{incident[0]}" in recorded_number_fact.citation_ids
     )
     event_consistency = all(
         citation.citation_id.split(":", 1)[1] in event_ids
         for citation in explanation.citations
         if citation.kind == "event"
     )
+    # The product accepts only a typed mode, never an arbitrary user question.
+    # Retrieval-only no-relevant-section cases must be rejected at the actual API
+    # boundary instead of being counted as successful retrieval or grounding.
+    no_relevant_safe = True
+    for case in results:
+        if case["expected_sections"]:
+            continue
+        response = httpx.post(
+            f"http://127.0.0.1:8000/api/v1/incidents/{incident[0]}/explanation",
+            json={
+                "mode": "offline",
+                "question": next(item["query"] for item in selected if item["id"] == case["id"]),
+            },
+            timeout=15,
+        )
+        case["safe_output_status"] = (
+            "question_rejected_422"
+            if response.status_code == 422
+            else f"unexpected_http_{response.status_code}"
+        )
+        no_relevant_safe &= response.status_code == 422
     scored = [case["recall_at_4"] for case in results if case["recall_at_4"] is not None]
     split_recall = {
         split: (
@@ -106,7 +138,7 @@ def main() -> int:
             if any(case["split"] == split and case["recall_at_4"] is not None for case in results)
             else None
         )
-        for split in ("dev", "heldout")
+        for split in sorted({case["split"] for case in results})
     }
     commit = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
     dirty = bool(subprocess.check_output(["git", "status", "--porcelain"], text=True).strip())
@@ -146,6 +178,15 @@ def main() -> int:
             "latency_ms": explanation_ms,
             "token_usage": None,
         },
+        "no_relevant_section_safety": {
+            "method": (
+                "actual API rejects unsupported question field; "
+                "retrieval queries are evaluation-only"
+            ),
+            "cases_checked": sum(not case["expected_sections"] for case in results),
+            "all_rejected_422": no_relevant_safe,
+            "not_a_relevance_or_semantic_grounding_score": True,
+        },
         "semantic_grounding_rubric": {
             "status": "not_human_reviewed",
             "criteria": [
@@ -172,7 +213,7 @@ def main() -> int:
             }
         )
     )
-    return 0 if numeric_fidelity and event_consistency else 1
+    return 0 if numeric_fidelity and event_consistency and no_relevant_safe else 1
 
 
 if __name__ == "__main__":

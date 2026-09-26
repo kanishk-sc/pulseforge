@@ -7,7 +7,7 @@ to reliable operational decisions: preserve the original event, validate its con
 process it once at the sink, model the business, detect explainable anomalies, and
 show the evidence behind an incident.
 
-**Current milestone: Phase 6 — evidence-bound incident assistance, under development.**
+**Current milestone: Phase 6 — evidence-bound incident assistance, offline path verified.**
 Kafka ingestion, Spark Structured Streaming, raw/cleaned/curated Parquet, a dead-letter
 pipeline, an idempotent PostgreSQL sink, dbt analytics and finite Airflow orchestration
 are implemented. Successful analytics are atomically published to a versioned FastAPI
@@ -332,8 +332,9 @@ docker compose --profile product up -d --build --wait api dashboard
 
 Open Incidents, select a persisted finding, then click **Explain this incident**. The
 button issues an explicit offline request; it never sends a paid provider request.
-The response separates facts, interpretation, unproven hypotheses, runbook-backed
-diagnostic steps, limitations and citations. It identifies the incident's **original**
+The response separates facts, interpretation, unproven hypotheses, candidate runbook
+sections, limitations and citations. Retrieval rank does not establish a section's
+applicability. It identifies the incident's **original**
 build and labels a newer publication separately. Without model assets, runbook matching
 is visibly labeled `lexical_fallback`; with no index it is `unavailable`.
 
@@ -425,11 +426,12 @@ no heartbeat alone proves end-to-end delivery. See the
 [Phase 5 signal contract](docs/architecture/phase-5-design.md) and
 [runbooks](docs/operations/runbooks.md).
 
-The planned assistant retrieves runbooks, incident evidence and recent metrics before
-responding. Statistical detection remains outside the LLM. The main platform will
-remain functional without an LLM key; offline output will be labeled as an evidence
-summary. Evaluation will distinguish measured retrieval/latency metrics from human
-judgments of usefulness. No AI accuracy results exist yet.
+The assistant retrieves versioned runbooks and an incident's persisted original-build
+evidence. Statistical detection remains outside the LLM. The platform works without
+an LLM key; offline output is labeled as a deterministic evidence summary. Retrieval
+relevance is measured on small synthetic case sets, but human claim-level grounding,
+usefulness and live-provider quality have not been scored. A valid citation ID does
+not prove that its cited text supports a claim.
 
 ## Deployment target
 
@@ -449,10 +451,9 @@ publication, versioned cached APIs, deterministic incidents/evidence, React oper
 dashboard, API/Spark/producer/finite-job telemetry, Grafana/Tempo provisioning,
 bounded local reliability acceptance, Compose and CI.
 
-Phase 5 was merged as PR #5. Phase 6 evidence-bound assistance is implemented on
-`phase-6-ai-assistant` for review: the offline path is verified locally, while live
-provider inference remains unverified and disabled by default. No Phase 6 PR has
-been merged. A real cloud deployment remains unimplemented.
+Phase 5 was merged as PR #5. Phase 6 evidence-bound assistance has a verified local
+offline path; its disabled-by-default live provider remains unverified. PR #6 tracks
+the Phase 6 review and merge status. A real cloud deployment remains unimplemented.
 
 ## Screenshots and benchmarks
 

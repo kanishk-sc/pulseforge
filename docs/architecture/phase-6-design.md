@@ -87,8 +87,9 @@ assistant migrations or download a model.
 The offline response is labeled exactly “Offline evidence summary — no generative
 model used.” Its observed facts copy stored detector numbers and source references;
 interpretation says only that the recorded comparison crossed its threshold. It
-offers runbook-section review steps, not remediation execution, and it abstains from
-root-cause hypotheses. Each statement references citation IDs from the validated
+offers candidate runbook sections with explicit relevance uncertainty, not remediation
+execution, and it abstains from root-cause hypotheses. A top-ranked section is not
+assumed to be applicable. Each statement references citation IDs from the validated
 bundle. The response distinguishes original and current build identities, stale
 historical publication, missing projection evidence, truncated references and
 unobserved Spark state. Decimal values are rendered from `Decimal`, not floats.

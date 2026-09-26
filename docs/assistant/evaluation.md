@@ -1,7 +1,11 @@
 # Phase 6 evaluation and limits
 
-The version-controlled [case set](eval-cases.jsonl) contains 32 cases, split before
-retrieval tuning into 16 development and 16 held-out cases. Each records its scenario,
+The version-controlled [case set](eval-cases.jsonl) contains 32 cases, originally split
+before retrieval tuning into 16 development and 16 held-out cases. During PR #6 review,
+the original held-out queries were inspected while considering an abstention threshold.
+That split is now **review-exposed**, not an untouched holdout. A separate
+[eight-case review holdout](eval-review-holdout.jsonl) was written before its first
+retrieval run and was not tuned after scoring. Each case records its scenario,
 query, relevant runbook section IDs (when one exists), required facts, forbidden
 claims, and whether causal abstention is expected. It covers payment, shipment,
 refund, order-volume and infrastructure interpretation; stale or absent evidence;
@@ -9,23 +13,37 @@ prompt injection; provider failures; citation fabrication; and corpus replacemen
 The case labels are expectations, not proof that those behaviors were executed.
 
 Run `uv run python scripts/evaluate_assistant.py --split all --output
-docs/assistant/eval-results.json` against populated local PostgreSQL after corpus
-ingestion. The runner measures retrieval recall@4 and latency for every case. Seven
-cases intentionally label no relevant section and are excluded from recall rather
-than counted as successes. It also executes one actual persisted payment incident
-through offline explanation and checks citation ID validity, exact recorded numeric
-values, original build identity, source event membership, and absence of a root-cause
-hypothesis. Separate focused unit/integration tests exercise missing-build,
-changed/deleted-document, provider timeout/malformed-output, and citation-rejection
-behavior. No case is silently scored as an executed scenario without a matching
-incident fixture.
+docs/assistant/eval-results.json` against populated local PostgreSQL **and the local
+API** after corpus ingestion. The runner measures retrieval recall@4 and latency.
+Seven original cases label no relevant section and are excluded from recall. For each,
+the runner submits its query as an unsupported `question` field to the live explanation
+API and requires HTTP 422. This verifies the product's narrow input boundary, **not**
+that semantic retrieval recognizes irrelevant text. The runner also executes one
+persisted payment incident and checks citation IDs, an exact whole-field copy of
+recorded numeric values, original build identity, source event membership, and no
+root-cause hypothesis. The integration suite separately creates a disposable database
+with persisted payment, shipment, refund and order-volume incidents, checks exact
+numeric/source/build consistency and stale labeling, and removes one original-build
+projection to verify explicit uncertainty. It does not claim a live immature-cohort
+detector evaluation or human semantic grounding. Changed/deleted corpus and mocked
+provider failure contracts have separate tests. No case is silently scored as an
+executed scenario without a matching fixture.
+
+Semantic search may still return a top-ranked section for an unrelated query; no
+calibrated relevance-abstention threshold is claimed. Offline explanations label
+runbook sections as candidate context and explicitly say retrieval rank does not
+establish applicability. The no-relevant API assertions check that unsupported
+free-form questions cannot turn those candidates into a user-facing answer.
 
 The measured report is [eval-results.json](eval-results.json). Development cases
 were used to choose bounded semantic/full-text rank fusion. The held-out cases were
 not used for that choice. The recorded outcome is 14/14 development and 10/11
-held-out relevant sections retrieved in the top four (24/25 overall, 0.96 mean
-case recall@4). This is retrieval relevance on a small synthetic corpus, not a
-business-incident grounding score or a production-quality estimate.
+original held-out relevant sections retrieved in the top four (24/25 overall, 0.96
+mean case recall@4). The original held-out result is historical and review-exposed.
+The fresh review holdout retrieved 7/7 labeled relevant sections; one no-relevant case
+was excluded from recall and its unsupported question was rejected with HTTP 422.
+This is retrieval relevance on a small synthetic corpus, not business-incident
+grounding, a general abstention metric, or a production-quality estimate.
 
 ## Claim-level rubric
 
