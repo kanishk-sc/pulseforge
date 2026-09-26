@@ -45,6 +45,40 @@ DEPENDENCY_FAILURES = Counter(
     "Failed dependency operations; a missing series does not imply availability.",
     ("dependency", "reason"),
 )
+ASSISTANT_REQUESTS = Counter(
+    "pulseforge_assistant_requests_total",
+    "Incident explanation outcomes by fixed execution mode.",
+    ("mode", "outcome"),
+)
+ASSISTANT_DURATION = Histogram(
+    "pulseforge_assistant_duration_seconds",
+    "Read-only incident explanation duration.",
+    ("mode",),
+)
+ASSISTANT_RETRIEVAL = Counter(
+    "pulseforge_assistant_retrieval_total",
+    "Runbook retrieval outcome; lexical fallback is not semantic retrieval.",
+    ("mode",),
+)
+ASSISTANT_RETRIEVAL_DURATION = Histogram(
+    "pulseforge_assistant_retrieval_duration_seconds",
+    "Bounded runbook retrieval duration.",
+    ("mode",),
+)
+ASSISTANT_PROVIDER_FAILURES = Counter(
+    "pulseforge_assistant_provider_failures_total",
+    "Bounded provider failure classes.",
+    ("reason",),
+)
+ASSISTANT_VALIDATION_FAILURES = Counter(
+    "pulseforge_assistant_validation_failures_total",
+    "Grounded response structural or citation validation failures.",
+)
+ASSISTANT_TOKENS = Counter(
+    "pulseforge_assistant_provider_tokens_total",
+    "Provider-reported token usage, only when present.",
+    ("direction",),
+)
 
 
 def record_counter(counter: Counter, *labels: str, amount: float = 1) -> None:
@@ -56,6 +90,14 @@ def record_counter(counter: Counter, *labels: str, amount: float = 1) -> None:
         if not _metric_failure_logged:
             logger.warning("metric_record_failed", extra={"error_type": type(exc).__name__})
             _metric_failure_logged = True
+
+
+def observe_histogram(histogram: Histogram, value: float, *labels: str) -> None:
+    """Best-effort observation with fixed labels only."""
+    try:
+        (histogram.labels(*labels) if labels else histogram).observe(value)
+    except Exception:
+        pass
 
 
 def failure_reason(exc: Exception) -> str:

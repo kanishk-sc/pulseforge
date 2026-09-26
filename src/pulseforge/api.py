@@ -22,6 +22,7 @@ from pulseforge.analytics import (
     fetch_overview,
     fetch_pipeline_status,
 )
+from pulseforge.assistant.api import create_assistant_router
 from pulseforge.config import Settings
 from pulseforge.dependencies import check_dependencies
 from pulseforge.logging import configure_logging
@@ -76,6 +77,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(title="PulseForge API", version="0.1.0", lifespan=lifespan)
     app.include_router(create_product_router(settings))
+    app.include_router(create_assistant_router(settings))
     app.middleware("http")(observe_request)
 
     @app.middleware("http")

@@ -104,6 +104,46 @@ export interface IncidentDetail extends Incident {
   evidence: Array<{ source_event_id: string; evidence_role: string; event_ts: string }>;
 }
 
+export interface ExplanationStatement {
+  text: string;
+  citation_ids: string[];
+}
+
+export interface ExplanationCitation {
+  citation_id: string;
+  kind: "incident" | "build" | "event" | "runbook" | "status";
+  label: string;
+  source_path: string | null;
+  section_id: string | null;
+  document_version: string | null;
+  excerpt: string | null;
+}
+
+export interface Explanation {
+  label: string;
+  mode: "offline" | "provider";
+  provider: string | null;
+  model: string | null;
+  incident_id: string;
+  analytics_build_id: string;
+  original_build_published_at: string | null;
+  current_build_id: string | null;
+  current_build_published_at: string | null;
+  latest_failed_build_at: string | null;
+  running_build_started_at: string | null;
+  source_reference_count: number;
+  source_references_included: number;
+  retrieval_mode: "semantic" | "lexical_fallback" | "unavailable";
+  corpus_sha256: string | null;
+  generated_at: string;
+  facts: ExplanationStatement[];
+  interpretations: ExplanationStatement[];
+  hypotheses: ExplanationStatement[];
+  diagnostic_steps: ExplanationStatement[];
+  limitations: ExplanationStatement[];
+  citations: ExplanationCitation[];
+}
+
 export interface DashboardData {
   payments: MetricResponse<PaymentPoint>;
   revenue: MetricResponse<RevenuePoint>;
@@ -195,4 +235,24 @@ export async function loadDashboard(
 
 export function loadIncident(incidentId: string, signal?: AbortSignal): Promise<IncidentDetail> {
   return getJson<IncidentDetail>(`/api/v1/incidents/${incidentId}`, signal);
+}
+
+export async function explainIncident(incidentId: string, signal?: AbortSignal): Promise<Explanation> {
+  const response = await fetch(`/api/v1/incidents/${encodeURIComponent(incidentId)}/explanation`, {
+    method: "POST",
+    signal,
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify({ mode: "offline" }),
+  });
+  if (!response.ok) {
+    let detail = `explanation unavailable (${response.status})`;
+    try {
+      const payload = (await response.json()) as { detail?: string };
+      if (payload.detail) detail = payload.detail.replaceAll("_", " ");
+    } catch {
+      // Preserve status when the response is not JSON.
+    }
+    throw new Error(detail);
+  }
+  return response.json() as Promise<Explanation>;
 }

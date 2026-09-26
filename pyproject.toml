@@ -17,6 +17,7 @@ dependencies = [
   "opentelemetry-api>=1.39,<2", "opentelemetry-sdk>=1.39,<2",
   "opentelemetry-instrumentation-fastapi>=0.60b0,<1",
   "opentelemetry-exporter-otlp-proto-http>=1.39,<2",
+  "fastembed==0.7.4",
 ]
 
 [dependency-groups]
@@ -50,4 +51,5 @@ markers = [
   "streaming: requires the streaming profile and performs controlled restarts/outages",
   "analytics: requires PostgreSQL and the analytics dbt image",
   "product: requires PostgreSQL and a successful product analytics publication",
+  "assistant: requires PostgreSQL, pgvector, and a populated runbook corpus",
 ]

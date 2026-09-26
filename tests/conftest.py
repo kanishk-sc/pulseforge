@@ -6,6 +6,7 @@ def pytest_addoption(parser):
     parser.addoption("--run-streaming", action="store_true", default=False)
     parser.addoption("--run-analytics", action="store_true", default=False)
     parser.addoption("--run-product", action="store_true", default=False)
+    parser.addoption("--run-assistant", action="store_true", default=False)
 
 
 def pytest_collection_modifyitems(config, items):
@@ -20,6 +21,8 @@ def pytest_collection_modifyitems(config, items):
             )
         if "product" in item.keywords and not config.getoption("--run-product"):
             item.add_marker(pytest.mark.skip(reason="start product profile and pass --run-product"))
+        if "assistant" in item.keywords and not config.getoption("--run-assistant"):
+            item.add_marker(pytest.mark.skip(reason="index runbooks and pass --run-assistant"))
     if config.getoption("--run-integration"):
         return
     skip = pytest.mark.skip(reason="start Compose and pass --run-integration")

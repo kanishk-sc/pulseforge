@@ -7,13 +7,15 @@ to reliable operational decisions: preserve the original event, validate its con
 process it once at the sink, model the business, detect explainable anomalies, and
 show the evidence behind an incident.
 
-**Current milestone: Phase 5 — observability and reliability, under PR review.**
+**Current milestone: Phase 6 — evidence-bound incident assistance, offline path verified.**
 Kafka ingestion, Spark Structured Streaming, raw/cleaned/curated Parquet, a dead-letter
 pipeline, an idempotent PostgreSQL sink, dbt analytics and finite Airflow orchestration
 are implemented. Successful analytics are atomically published to a versioned FastAPI
 surface, deterministic detectors persist evidence-backed incidents, and the React
-dashboard exposes the result. The AI assistant remains future work. All generated data
-is synthetic.
+dashboard exposes the result. Phase 5 observability is merged. Phase 6 adds an opt-in,
+read-only incident explanation backed by the original analytics build and versioned
+runbooks. Offline summaries work without a provider; live provider inference is not
+part of the verified local path. All generated data is synthetic.
 
 See the [implementation checklist](docs/architecture/implementation-plan.md) and
 [actual verification record](docs/verification.md).
@@ -60,8 +62,9 @@ flowchart LR
     DET --> INC[(Incidents and source evidence)]
     INC --> API
     API --> UI[React operations dashboard]
-    RAG[Phase 6: evidence-based assistant] -.-> API
-    RAG -.-> V[(pgvector runbooks)]
+    INC --> RAG[Phase 6: evidence-bound assistant]
+    V[(Versioned pgvector runbooks)] --> RAG
+    RAG --> API
 ```
 
 | Layer | Technology | Purpose and status |
@@ -74,8 +77,8 @@ flowchart LR
 | Streaming | Spark 4.0.1, PySpark, Kafka connector | Event-time deduplication, DLQ, checkpoint recovery and JDBC staging |
 | Modeling | dbt, Airflow | Implemented: documented facts/dimensions/marts, tests and finite hourly DAG |
 | Product | React, TypeScript, Redis | Implemented: build-aware APIs, detectors, incidents and evidence UI |
-| Telemetry | Prometheus, Grafana, OpenTelemetry | Phase 5 |
-| Assistant | pgvector, provider abstraction | Phase 6, optional paid provider, offline support |
+| Telemetry | Prometheus, Grafana, OpenTelemetry | Implemented Phase 5, optional local profile |
+| Assistant | pgvector, FastEmbed, optional provider adapter | Phase 6: verified offline path; live provider unverified |
 | Deployment | Terraform, AWS ECS/RDS/ElastiCache/S3/ECR | Validated configuration; not applied or publicly deployed |
 
 ## Key engineering features
@@ -86,6 +89,7 @@ flowchart LR
 - Airflow batch orchestration separated from Spark's checkpoint-owned streaming lifecycle
 - Redis-cached typed analytics APIs with direct-warehouse fallback during cache failure
 - Real-data React dashboard plus bounded-cardinality Prometheus metrics and optional traces
+- Read-only, citation-checked offline incident explanations from original-build evidence and versioned local runbooks
 
 ## Tech stack
 
@@ -303,6 +307,55 @@ ingestion boundary and is idempotent within its evaluation hour. See the
 [Phase 4 design](docs/architecture/phase-4-design.md) for publication and detector
 semantics.
 
+### Explain an existing incident (Phase 6, optional setup)
+
+The default `docker compose up -d --build --wait` remains functional without a model
+download or assistant migration. To enable indexed semantic runbooks locally, keep the
+existing PostgreSQL named volume and run these PowerShell-compatible commands. The
+one-time model download contacts the public Hugging Face model repository; subsequent
+indexing and explanations use the pinned local snapshot offline.
+MinIO now builds the same pinned 2025-09-07 release from its
+[official GitHub release asset](https://github.com/minio/minio/releases/tag/RELEASE.2025-09-07T16-13-09Z),
+verified by SHA-256, because fresh CI runners cannot pull the previously configured
+Quay image. Its existing `minio-data` volume is unchanged; first build downloads the
+110.99 MB release binary.
+
+```powershell
+uv sync --frozen
+docker compose up -d --wait postgres
+uv run python -m pulseforge.assistant.cli migrate
+uv run python -m pulseforge.assistant.cli download-model
+uv run python -m pulseforge.assistant.cli ingest
+uv run python -m pulseforge.assistant.cli retrieve "payment failure rate incident triage" --top-k 4
+docker compose --profile product up -d --build --wait api dashboard
+```
+
+Open Incidents, select a persisted finding, then click **Explain this incident**. The
+button issues an explicit offline request; it never sends a paid provider request.
+The response separates facts, interpretation, unproven hypotheses, candidate runbook
+sections, limitations and citations. Retrieval rank does not establish a section's
+applicability. It identifies the incident's **original**
+build and labels a newer publication separately. Without model assets, runbook matching
+is visibly labeled `lexical_fallback`; with no index it is `unavailable`.
+
+For a CLI explanation, use the UUID from `/api/v1/incidents`:
+
+```powershell
+uv run python -m pulseforge.assistant.cli explain <incident-uuid>
+uv run pytest tests/test_assistant_integration.py --run-integration --run-assistant
+uv run python scripts/evaluate_assistant.py --split all --output docs/assistant/eval-results.json
+```
+
+The optional provider is disabled by default. Only after a separate decision to
+transmit incident/runbook content and spend a bounded amount should an operator set
+`ASSISTANT_PROVIDER=openai`, a provider-supported `ASSISTANT_PROVIDER_MODEL`, and
+`ASSISTANT_PROVIDER_KEY` in ignored `.env`, restart the API, and explicitly POST
+`{"mode":"provider"}` to an incident explanation endpoint. No live provider call is
+part of the documented verification. Do not expose this unauthenticated local API to
+the Internet. See the [Phase 6 design](docs/architecture/phase-6-design.md),
+[local operations](docs/assistant/operations.md) and
+[evaluation report](docs/assistant/evaluation.md) for exact contracts and limits.
+
 ### Development and tests
 
 ```sh
@@ -373,11 +426,12 @@ no heartbeat alone proves end-to-end delivery. See the
 [Phase 5 signal contract](docs/architecture/phase-5-design.md) and
 [runbooks](docs/operations/runbooks.md).
 
-The planned assistant retrieves runbooks, incident evidence and recent metrics before
-responding. Statistical detection remains outside the LLM. The main platform will
-remain functional without an LLM key; offline output will be labeled as an evidence
-summary. Evaluation will distinguish measured retrieval/latency metrics from human
-judgments of usefulness. No AI accuracy results exist yet.
+The assistant retrieves versioned runbooks and an incident's persisted original-build
+evidence. Statistical detection remains outside the LLM. The platform works without
+an LLM key; offline output is labeled as a deterministic evidence summary. Retrieval
+relevance is measured on small synthetic case sets, but human claim-level grounding,
+usefulness and live-provider quality have not been scored. A valid citation ID does
+not prove that its cited text supports a claim.
 
 ## Deployment target
 
@@ -397,11 +451,9 @@ publication, versioned cached APIs, deterministic incidents/evidence, React oper
 dashboard, API/Spark/producer/finite-job telemetry, Grafana/Tempo provisioning,
 bounded local reliability acceptance, Compose and CI.
 
-In progress: hosted Phase 5 PR checks and review; the local acceptance evidence is
-recorded, but the branch is not merged.
-
-Planned: retrieval-grounded operations assistance and any
-real cloud deployment.
+Phase 5 was merged as PR #5. Phase 6 evidence-bound assistance has a verified local
+offline path; its disabled-by-default live provider remains unverified. PR #6 tracks
+the Phase 6 review and merge status. A real cloud deployment remains unimplemented.
 
 ## Screenshots and benchmarks
 

@@ -1,0 +1,1 @@
+"""Versioned assistant schema migrations."""

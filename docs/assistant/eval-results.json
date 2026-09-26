@@ -1,0 +1,707 @@
+{
+  "evaluated_at": "2026-09-26T05:38:46.814482+00:00",
+  "tested_commit": "94b884af0ed6007f2f5b6ebe6b68f08abfadf42d",
+  "working_tree_dirty": false,
+  "dataset_version": "22b9530e3a4e66ce702aa80ab9aa64de67c8e02ea87c614690abe11ede4496dd",
+  "dataset_cases": 32,
+  "selected_cases": 32,
+  "corpus_version": "7bb946f4bc5b3b43e6a8fe5ad03762766054efdf2c090a158180c5da7f2650ff",
+  "embedding_model": "fastembed-0.7.4:qdrant/all-MiniLM-L6-v2-onnx@5f1b8cd78bc4fb444dd171e59b18f3a3af89a079:384",
+  "prompt_version": "incident-grounding-v1",
+  "execution_mode": "offline",
+  "provider": null,
+  "provider_model": null,
+  "exact_command": "'C:\\Users\\kanis\\AppData\\Local\\uv\\cache\\builds-v0\\.tmpmy8AWJ\\Scripts\\python.exe' scripts/evaluate_assistant.py --split all --output docs/assistant/eval-results.json",
+  "retrieval": {
+    "scored_cases": 25,
+    "unscored_no_relevant_section": 7,
+    "recall_at_4": 0.96,
+    "recall_at_4_by_split": {
+      "dev": 1.0,
+      "heldout": 0.9090909090909091
+    },
+    "latency_p50_ms": 13.241,
+    "latency_p95_ms": 18.683,
+    "cases": [
+      {
+        "id": "dev-01",
+        "split": "dev",
+        "scenario": "payment failure threshold",
+        "retrieval_mode": "semantic",
+        "expected_sections": [
+          "product-design:deterministic-detectors-1:0"
+        ],
+        "returned_sections": [
+          "product-design:deterministic-detectors-1:0",
+          "product-design:deterministic-acceptance-fixture-1:0",
+          "reliability-design:signal-contract-1:3",
+          "reliability-design:signal-contract-1:2"
+        ],
+        "hits": [
+          "product-design:deterministic-detectors-1:0"
+        ],
+        "recall_at_4": 1.0,
+        "latency_ms": 24.406,
+        "behavioral_case_status": "not_executed_without_matching_incident_fixture"
+      },
+      {
+        "id": "dev-02",
+        "split": "dev",
+        "scenario": "payment source evidence",
+        "retrieval_mode": "semantic",
+        "expected_sections": [
+          "product-design:product-schema-1:0"
+        ],
+        "returned_sections": [
+          "product-design:product-schema-1:0",
+          "reliability-design:signal-contract-1:3",
+          "product-design:deterministic-acceptance-fixture-1:0",
+          "product-design:dashboard-behavior-1:0"
+        ],
+        "hits": [
+          "product-design:product-schema-1:0"
+        ],
+        "recall_at_4": 1.0,
+        "latency_ms": 13.165,
+        "behavioral_case_status": "not_executed_without_matching_incident_fixture"
+      },
+      {
+        "id": "dev-03",
+        "split": "dev",
+        "scenario": "payment fixture",
+        "retrieval_mode": "semantic",
+        "expected_sections": [
+          "product-design:deterministic-acceptance-fixture-1:0"
+        ],
+        "returned_sections": [
+          "product-design:deterministic-acceptance-fixture-1:0",
+          "product-design:deterministic-detectors-1:0",
+          "reliability-design:signal-contract-1:3",
+          "product-design:versioned-api-contract-1:0"
+        ],
+        "hits": [
+          "product-design:deterministic-acceptance-fixture-1:0"
+        ],
+        "recall_at_4": 1.0,
+        "latency_ms": 12.518,
+        "behavioral_case_status": "not_executed_without_matching_incident_fixture"
+      },
+      {
+        "id": "dev-04",
+        "split": "dev",
+        "scenario": "shipment maturity",
+        "retrieval_mode": "semantic",
+        "expected_sections": [
+          "product-design:deterministic-detectors-1:0"
+        ],
+        "returned_sections": [
+          "product-design:deterministic-detectors-1:0",
+          "product-design:deterministic-acceptance-fixture-1:0",
+          "product-design:product-schema-1:0",
+          "product-design:versioned-api-contract-1:0"
+        ],
+        "hits": [
+          "product-design:deterministic-detectors-1:0"
+        ],
+        "recall_at_4": 1.0,
+        "latency_ms": 12.15,
+        "behavioral_case_status": "not_executed_without_matching_incident_fixture"
+      },
+      {
+        "id": "dev-05",
+        "split": "dev",
+        "scenario": "shipment interpretation",
+        "retrieval_mode": "semantic",
+        "expected_sections": [
+          "product-design:product-schema-1:0"
+        ],
+        "returned_sections": [
+          "product-design:deterministic-detectors-1:0",
+          "product-design:product-schema-1:0",
+          "reliability-design:signal-contract-1:3",
+          "product-design:deterministic-acceptance-fixture-1:0"
+        ],
+        "hits": [
+          "product-design:product-schema-1:0"
+        ],
+        "recall_at_4": 1.0,
+        "latency_ms": 12.217,
+        "behavioral_case_status": "not_executed_without_matching_incident_fixture"
+      },
+      {
+        "id": "dev-06",
+        "split": "dev",
+        "scenario": "refund semantic boundary",
+        "retrieval_mode": "semantic",
+        "expected_sections": [
+          "product-design:versioned-api-contract-1:0"
+        ],
+        "returned_sections": [
+          "product-design:versioned-api-contract-1:0",
+          "operations-runbooks:local-bounded-load-measurements-1:0",
+          "product-design:deterministic-detectors-1:0",
+          "reliability-design:signal-contract-1:1"
+        ],
+        "hits": [
+          "product-design:versioned-api-contract-1:0"
+        ],
+        "recall_at_4": 1.0,
+        "latency_ms": 14.279,
+        "behavioral_case_status": "not_executed_without_matching_incident_fixture"
+      },
+      {
+        "id": "dev-07",
+        "split": "dev",
+        "scenario": "refund detector",
+        "retrieval_mode": "semantic",
+        "expected_sections": [
+          "product-design:deterministic-detectors-1:0"
+        ],
+        "returned_sections": [
+          "product-design:deterministic-detectors-1:0",
+          "product-design:dashboard-behavior-1:0",
+          "reliability-design:signal-contract-1:2",
+          "product-design:deterministic-acceptance-fixture-1:0"
+        ],
+        "hits": [
+          "product-design:deterministic-detectors-1:0"
+        ],
+        "recall_at_4": 1.0,
+        "latency_ms": 14.103,
+        "behavioral_case_status": "not_executed_without_matching_incident_fixture"
+      },
+      {
+        "id": "dev-08",
+        "split": "dev",
+        "scenario": "order drop missing hour",
+        "retrieval_mode": "semantic",
+        "expected_sections": [
+          "product-design:deterministic-detectors-1:0"
+        ],
+        "returned_sections": [
+          "product-design:deterministic-detectors-1:0",
+          "reliability-design:signal-contract-1:2",
+          "operations-runbooks:local-operations-runbooks-1:0",
+          "reliability-design:signal-contract-1:3"
+        ],
+        "hits": [
+          "product-design:deterministic-detectors-1:0"
+        ],
+        "recall_at_4": 1.0,
+        "latency_ms": 13.674,
+        "behavioral_case_status": "not_executed_without_matching_incident_fixture"
+      },
+      {
+        "id": "dev-09",
+        "split": "dev",
+        "scenario": "stale analytics",
+        "retrieval_mode": "semantic",
+        "expected_sections": [
+          "product-design:atomic-publication-and-freshness-1:0"
+        ],
+        "returned_sections": [
+          "reliability-design:signal-contract-1:3",
+          "product-design:atomic-publication-and-freshness-1:0",
+          "reliability-design:boundaries-1:0",
+          "reliability-design:alerts-and-interpretation-1:0"
+        ],
+        "hits": [
+          "product-design:atomic-publication-and-freshness-1:0"
+        ],
+        "recall_at_4": 1.0,
+        "latency_ms": 12.277,
+        "behavioral_case_status": "not_executed_without_matching_incident_fixture"
+      },
+      {
+        "id": "dev-10",
+        "split": "dev",
+        "scenario": "failed build isolation",
+        "retrieval_mode": "semantic",
+        "expected_sections": [
+          "product-design:atomic-publication-and-freshness-1:0"
+        ],
+        "returned_sections": [
+          "product-design:atomic-publication-and-freshness-1:0",
+          "product-design:product-boundary-1:0",
+          "reliability-design:signal-contract-1:3",
+          "reliability-design:boundaries-1:0"
+        ],
+        "hits": [
+          "product-design:atomic-publication-and-freshness-1:0"
+        ],
+        "recall_at_4": 1.0,
+        "latency_ms": 13.465,
+        "behavioral_case_status": "not_executed_without_matching_incident_fixture"
+      },
+      {
+        "id": "dev-11",
+        "split": "dev",
+        "scenario": "cache failure",
+        "retrieval_mode": "semantic",
+        "expected_sections": [
+          "operations-runbooks:triage-and-safe-recovery-1:0"
+        ],
+        "returned_sections": [
+          "operations-runbooks:triage-and-safe-recovery-1:0",
+          "operations-runbooks:bounded-failure-drills-1:0",
+          "operations-runbooks:local-bounded-load-measurements-1:0",
+          "reliability-design:boundaries-1:0"
+        ],
+        "hits": [
+          "operations-runbooks:triage-and-safe-recovery-1:0"
+        ],
+        "recall_at_4": 1.0,
+        "latency_ms": 11.495,
+        "behavioral_case_status": "not_executed_without_matching_incident_fixture"
+      },
+      {
+        "id": "dev-12",
+        "split": "dev",
+        "scenario": "postgres failure",
+        "retrieval_mode": "semantic",
+        "expected_sections": [
+          "operations-runbooks:bounded-failure-drills-1:0"
+        ],
+        "returned_sections": [
+          "reliability-design:boundaries-1:0",
+          "product-design:versioned-api-contract-1:0",
+          "operations-runbooks:what-each-signal-proves-1:0",
+          "operations-runbooks:bounded-failure-drills-1:0"
+        ],
+        "hits": [
+          "operations-runbooks:bounded-failure-drills-1:0"
+        ],
+        "recall_at_4": 1.0,
+        "latency_ms": 13.621,
+        "behavioral_case_status": "not_executed_without_matching_incident_fixture"
+      },
+      {
+        "id": "dev-13",
+        "split": "dev",
+        "scenario": "streaming liveness unknown",
+        "retrieval_mode": "semantic",
+        "expected_sections": [
+          "operations-runbooks:what-each-signal-proves-1:0"
+        ],
+        "returned_sections": [
+          "operations-runbooks:what-each-signal-proves-1:0",
+          "reliability-design:signal-contract-1:2",
+          "operations-runbooks:triage-and-safe-recovery-1:0",
+          "reliability-design:boundaries-1:0"
+        ],
+        "hits": [
+          "operations-runbooks:what-each-signal-proves-1:0"
+        ],
+        "recall_at_4": 1.0,
+        "latency_ms": 12.741,
+        "behavioral_case_status": "not_executed_without_matching_incident_fixture"
+      },
+      {
+        "id": "dev-14",
+        "split": "dev",
+        "scenario": "active stream staleness",
+        "retrieval_mode": "semantic",
+        "expected_sections": [
+          "reliability-design:alerts-and-interpretation-1:0"
+        ],
+        "returned_sections": [
+          "reliability-design:alerts-and-interpretation-1:0",
+          "operations-runbooks:triage-and-safe-recovery-1:0",
+          "reliability-design:signal-contract-1:2",
+          "operations-runbooks:what-each-signal-proves-1:0"
+        ],
+        "hits": [
+          "reliability-design:alerts-and-interpretation-1:0"
+        ],
+        "recall_at_4": 1.0,
+        "latency_ms": 12.067,
+        "behavioral_case_status": "not_executed_without_matching_incident_fixture"
+      },
+      {
+        "id": "dev-15",
+        "split": "dev",
+        "scenario": "unsupported root cause",
+        "retrieval_mode": "semantic",
+        "expected_sections": [],
+        "returned_sections": [
+          "product-design:deterministic-acceptance-fixture-1:0",
+          "product-design:deterministic-detectors-1:0",
+          "product-design:versioned-api-contract-1:0",
+          "operations-runbooks:triage-and-safe-recovery-1:0"
+        ],
+        "hits": [],
+        "recall_at_4": null,
+        "latency_ms": 11.836,
+        "behavioral_case_status": "not_executed_without_matching_incident_fixture",
+        "safe_output_status": "question_rejected_422"
+      },
+      {
+        "id": "dev-16",
+        "split": "dev",
+        "scenario": "prompt injection",
+        "retrieval_mode": "semantic",
+        "expected_sections": [],
+        "returned_sections": [
+          "product-design:deterministic-acceptance-fixture-1:0",
+          "product-design:versioned-api-contract-1:0",
+          "operations-runbooks:bounded-failure-drills-1:0",
+          "product-design:atomic-publication-and-freshness-1:0"
+        ],
+        "hits": [],
+        "recall_at_4": null,
+        "latency_ms": 14.132,
+        "behavioral_case_status": "not_executed_without_matching_incident_fixture",
+        "safe_output_status": "question_rejected_422"
+      },
+      {
+        "id": "held-01",
+        "split": "heldout",
+        "scenario": "payment window",
+        "retrieval_mode": "semantic",
+        "expected_sections": [
+          "product-design:deterministic-detectors-1:0"
+        ],
+        "returned_sections": [
+          "product-design:deterministic-detectors-1:0",
+          "product-design:deterministic-acceptance-fixture-1:0",
+          "product-design:product-schema-1:0",
+          "reliability-design:signal-contract-1:4"
+        ],
+        "hits": [
+          "product-design:deterministic-detectors-1:0"
+        ],
+        "recall_at_4": 1.0,
+        "latency_ms": 12.909,
+        "behavioral_case_status": "not_executed_without_matching_incident_fixture"
+      },
+      {
+        "id": "held-02",
+        "split": "heldout",
+        "scenario": "revenue boundary",
+        "retrieval_mode": "semantic",
+        "expected_sections": [
+          "product-design:versioned-api-contract-1:0"
+        ],
+        "returned_sections": [
+          "product-design:versioned-api-contract-1:0",
+          "product-design:deterministic-detectors-1:0",
+          "product-design:deterministic-acceptance-fixture-1:0",
+          "product-design:atomic-publication-and-freshness-1:0"
+        ],
+        "hits": [
+          "product-design:versioned-api-contract-1:0"
+        ],
+        "recall_at_4": 1.0,
+        "latency_ms": 16.693,
+        "behavioral_case_status": "not_executed_without_matching_incident_fixture"
+      },
+      {
+        "id": "held-03",
+        "split": "heldout",
+        "scenario": "immature shipment cohort",
+        "retrieval_mode": "semantic",
+        "expected_sections": [
+          "product-design:versioned-api-contract-1:0"
+        ],
+        "returned_sections": [
+          "product-design:deterministic-detectors-1:0",
+          "reliability-design:alerts-and-interpretation-1:0",
+          "operations-runbooks:local-bounded-load-measurements-1:0",
+          "product-design:versioned-api-contract-1:0"
+        ],
+        "hits": [
+          "product-design:versioned-api-contract-1:0"
+        ],
+        "recall_at_4": 1.0,
+        "latency_ms": 17.858,
+        "behavioral_case_status": "not_executed_without_matching_incident_fixture"
+      },
+      {
+        "id": "held-04",
+        "split": "heldout",
+        "scenario": "late shipment delay",
+        "retrieval_mode": "semantic",
+        "expected_sections": [
+          "product-design:product-schema-1:0"
+        ],
+        "returned_sections": [
+          "product-design:product-schema-1:0",
+          "product-design:deterministic-detectors-1:0",
+          "reliability-design:signal-contract-1:3",
+          "product-design:deterministic-acceptance-fixture-1:0"
+        ],
+        "hits": [
+          "product-design:product-schema-1:0"
+        ],
+        "recall_at_4": 1.0,
+        "latency_ms": 15.292,
+        "behavioral_case_status": "not_executed_without_matching_incident_fixture"
+      },
+      {
+        "id": "held-05",
+        "split": "heldout",
+        "scenario": "refund ratio no denominator",
+        "retrieval_mode": "semantic",
+        "expected_sections": [
+          "product-design:versioned-api-contract-1:0"
+        ],
+        "returned_sections": [
+          "product-design:deterministic-detectors-1:0",
+          "product-design:dashboard-behavior-1:0",
+          "product-design:versioned-api-contract-1:0",
+          "reliability-design:signal-contract-1:4"
+        ],
+        "hits": [
+          "product-design:versioned-api-contract-1:0"
+        ],
+        "recall_at_4": 1.0,
+        "latency_ms": 15.384,
+        "behavioral_case_status": "not_executed_without_matching_incident_fixture"
+      },
+      {
+        "id": "held-06",
+        "split": "heldout",
+        "scenario": "order anomaly",
+        "retrieval_mode": "semantic",
+        "expected_sections": [
+          "product-design:deterministic-detectors-1:0"
+        ],
+        "returned_sections": [
+          "product-design:deterministic-detectors-1:0",
+          "product-design:deterministic-acceptance-fixture-1:0",
+          "reliability-design:signal-contract-1:4",
+          "product-design:known-limits-1:0"
+        ],
+        "hits": [
+          "product-design:deterministic-detectors-1:0"
+        ],
+        "recall_at_4": 1.0,
+        "latency_ms": 19.23,
+        "behavioral_case_status": "not_executed_without_matching_incident_fixture"
+      },
+      {
+        "id": "held-07",
+        "split": "heldout",
+        "scenario": "missing original build",
+        "retrieval_mode": "semantic",
+        "expected_sections": [
+          "product-design:atomic-publication-and-freshness-1:0"
+        ],
+        "returned_sections": [
+          "product-design:atomic-publication-and-freshness-1:0",
+          "product-design:product-schema-1:0",
+          "reliability-design:signal-contract-1:3",
+          "product-design:deterministic-detectors-1:0"
+        ],
+        "hits": [
+          "product-design:atomic-publication-and-freshness-1:0"
+        ],
+        "recall_at_4": 1.0,
+        "latency_ms": 18.683,
+        "behavioral_case_status": "not_executed_without_matching_incident_fixture"
+      },
+      {
+        "id": "held-08",
+        "split": "heldout",
+        "scenario": "missing source projection",
+        "retrieval_mode": "semantic",
+        "expected_sections": [
+          "product-design:product-schema-1:0"
+        ],
+        "returned_sections": [
+          "product-design:product-schema-1:0",
+          "reliability-design:signal-contract-1:3",
+          "product-design:atomic-publication-and-freshness-1:0",
+          "product-design:product-boundary-1:0"
+        ],
+        "hits": [
+          "product-design:product-schema-1:0"
+        ],
+        "recall_at_4": 1.0,
+        "latency_ms": 16.326,
+        "behavioral_case_status": "not_executed_without_matching_incident_fixture"
+      },
+      {
+        "id": "held-09",
+        "split": "heldout",
+        "scenario": "telemetry unknown",
+        "retrieval_mode": "semantic",
+        "expected_sections": [
+          "operations-runbooks:what-each-signal-proves-1:0"
+        ],
+        "returned_sections": [
+          "reliability-design:signal-contract-1:0",
+          "operations-runbooks:start-and-inspect-1:0",
+          "reliability-design:signal-contract-1:3",
+          "operations-runbooks:what-each-signal-proves-1:0"
+        ],
+        "hits": [
+          "operations-runbooks:what-each-signal-proves-1:0"
+        ],
+        "recall_at_4": 1.0,
+        "latency_ms": 13.769,
+        "behavioral_case_status": "not_executed_without_matching_incident_fixture"
+      },
+      {
+        "id": "held-10",
+        "split": "heldout",
+        "scenario": "publication lag",
+        "retrieval_mode": "semantic",
+        "expected_sections": [
+          "reliability-design:alerts-and-interpretation-1:0"
+        ],
+        "returned_sections": [
+          "reliability-design:signal-contract-1:3",
+          "reliability-design:alerts-and-interpretation-1:0",
+          "product-design:atomic-publication-and-freshness-1:0",
+          "product-design:product-boundary-1:0"
+        ],
+        "hits": [
+          "reliability-design:alerts-and-interpretation-1:0"
+        ],
+        "recall_at_4": 1.0,
+        "latency_ms": 13.789,
+        "behavioral_case_status": "not_executed_without_matching_incident_fixture"
+      },
+      {
+        "id": "held-11",
+        "split": "heldout",
+        "scenario": "conflicting signals",
+        "retrieval_mode": "semantic",
+        "expected_sections": [
+          "operations-runbooks:what-each-signal-proves-1:0"
+        ],
+        "returned_sections": [
+          "product-design:atomic-publication-and-freshness-1:0",
+          "reliability-design:signal-contract-1:3",
+          "reliability-design:alerts-and-interpretation-1:0",
+          "reliability-design:boundaries-1:0"
+        ],
+        "hits": [],
+        "recall_at_4": 0.0,
+        "latency_ms": 13.241,
+        "behavioral_case_status": "not_executed_without_matching_incident_fixture"
+      },
+      {
+        "id": "held-12",
+        "split": "heldout",
+        "scenario": "no relevant runbook",
+        "retrieval_mode": "semantic",
+        "expected_sections": [],
+        "returned_sections": [
+          "product-design:versioned-api-contract-1:0",
+          "reliability-design:boundaries-1:0",
+          "reliability-design:alerts-and-interpretation-1:0",
+          "operations-runbooks:start-and-inspect-1:0"
+        ],
+        "hits": [],
+        "recall_at_4": null,
+        "latency_ms": 12.956,
+        "behavioral_case_status": "not_executed_without_matching_incident_fixture",
+        "safe_output_status": "question_rejected_422"
+      },
+      {
+        "id": "held-13",
+        "split": "heldout",
+        "scenario": "provider timeout",
+        "retrieval_mode": "semantic",
+        "expected_sections": [],
+        "returned_sections": [
+          "operations-runbooks:local-bounded-load-measurements-1:0",
+          "reliability-design:signal-contract-1:1",
+          "reliability-design:trace-contract-1:0",
+          "product-design:deterministic-detectors-1:0"
+        ],
+        "hits": [],
+        "recall_at_4": null,
+        "latency_ms": 12.164,
+        "behavioral_case_status": "not_executed_without_matching_incident_fixture",
+        "safe_output_status": "question_rejected_422"
+      },
+      {
+        "id": "held-14",
+        "split": "heldout",
+        "scenario": "malformed output",
+        "retrieval_mode": "semantic",
+        "expected_sections": [],
+        "returned_sections": [
+          "product-design:versioned-api-contract-1:0",
+          "reliability-design:trace-contract-1:0",
+          "product-design:dashboard-behavior-1:0",
+          "operations-runbooks:triage-and-safe-recovery-1:0"
+        ],
+        "hits": [],
+        "recall_at_4": null,
+        "latency_ms": 11.298,
+        "behavioral_case_status": "not_executed_without_matching_incident_fixture",
+        "safe_output_status": "question_rejected_422"
+      },
+      {
+        "id": "held-15",
+        "split": "heldout",
+        "scenario": "citation fabrication",
+        "retrieval_mode": "semantic",
+        "expected_sections": [],
+        "returned_sections": [
+          "product-design:product-schema-1:0",
+          "product-design:deterministic-acceptance-fixture-1:0",
+          "reliability-design:signal-contract-1:3",
+          "product-design:atomic-publication-and-freshness-1:0"
+        ],
+        "hits": [],
+        "recall_at_4": null,
+        "latency_ms": 12.861,
+        "behavioral_case_status": "not_executed_without_matching_incident_fixture",
+        "safe_output_status": "question_rejected_422"
+      },
+      {
+        "id": "held-16",
+        "split": "heldout",
+        "scenario": "corpus update and delete",
+        "retrieval_mode": "semantic",
+        "expected_sections": [],
+        "returned_sections": [
+          "operations-runbooks:local-operations-runbooks-1:0",
+          "operations-runbooks:bounded-failure-drills-1:0",
+          "product-design:atomic-publication-and-freshness-1:0",
+          "operations-runbooks:triage-and-safe-recovery-1:0"
+        ],
+        "hits": [],
+        "recall_at_4": null,
+        "latency_ms": 11.875,
+        "behavioral_case_status": "not_executed_without_matching_incident_fixture",
+        "safe_output_status": "question_rejected_422"
+      }
+    ]
+  },
+  "real_offline_incident": {
+    "incident_id": "13602229-11a4-4401-b888-08e066a0f03c",
+    "original_build_id": "1c4d8342-6791-4024-b7a6-c796e1a27b15",
+    "response_build_id": "1c4d8342-6791-4024-b7a6-c796e1a27b15",
+    "citation_validity": true,
+    "numerical_fidelity": true,
+    "event_reference_consistency": true,
+    "abstains_from_root_cause": true,
+    "retrieval_mode": "semantic",
+    "latency_ms": 3250.906,
+    "token_usage": null
+  },
+  "no_relevant_section_safety": {
+    "method": "actual API rejects unsupported question field; retrieval queries are evaluation-only",
+    "cases_checked": 7,
+    "all_rejected_422": true,
+    "not_a_relevance_or_semantic_grounding_score": true
+  },
+  "semantic_grounding_rubric": {
+    "status": "not_human_reviewed",
+    "criteria": [
+      "Every causal statement is supported by supplied original-build evidence",
+      "Diagnostic steps match cited runbook text",
+      "Missing/stale telemetry is interpreted as unknown",
+      "Explanation is useful without overstating certainty"
+    ],
+    "score": null
+  },
+  "live_provider_evaluation": "unverified_not_authorized",
+  "elapsed_seconds": 7.11
+}
