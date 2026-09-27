@@ -1,16 +1,22 @@
-output "load_balancer_url" {
-  value = "http://${aws_lb.main.dns_name}"
+output "instance_id" {
+  description = "Private SSM-managed host; no SSH or public application address is provisioned."
+  value       = aws_instance.platform.id
 }
 
-output "ecr_repository_urls" {
-  value = { for name, repository in aws_ecr_repository.service : name => repository.repository_url }
+output "private_ip" {
+  value = aws_instance.platform.private_ip
 }
 
-output "lake_bucket" {
-  value = aws_s3_bucket.lake.id
+output "data_volume_id" {
+  description = "Protected encrypted data volume. Never format or discard without a verified backup."
+  value       = aws_ebs_volume.platform_data.id
 }
 
-output "database_secret_arn" {
-  value     = aws_secretsmanager_secret.database.arn
-  sensitive = true
+output "backup_bucket_name" {
+  value = aws_s3_bucket.backup.id
+}
+
+output "session_manager_dashboard_command" {
+  description = "Operator-authenticated localhost forward; requires AWS CLI and Session Manager plugin."
+  value       = "aws ssm start-session --target ${aws_instance.platform.id} --region ${var.aws_region} --document-name AWS-StartPortForwardingSession --parameters portNumber=15173,localPortNumber=15173"
 }

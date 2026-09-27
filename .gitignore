@@ -22,3 +22,9 @@ analytics/.user.yml
 *.log
 *-results.xml
 .DS_Store
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+!*.tfvars.example

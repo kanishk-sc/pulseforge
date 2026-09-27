@@ -206,6 +206,8 @@ def load_corpus(project_root: Path) -> tuple[Document, ...]:
 
 
 def apply_migrations(connection: psycopg.Connection) -> list[str]:
+    if not connection.execute("SELECT pg_try_advisory_xact_lock(47921208)").fetchone()[0]:
+        raise RuntimeError("Another assistant schema migration is already running")
     connection.execute("CREATE SCHEMA IF NOT EXISTS assistant")
     connection.execute(
         "CREATE TABLE IF NOT EXISTS assistant.schema_migrations "

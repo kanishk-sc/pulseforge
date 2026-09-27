@@ -52,4 +52,5 @@ markers = [
   "analytics: requires PostgreSQL and the analytics dbt image",
   "product: requires PostgreSQL and a successful product analytics publication",
   "assistant: requires PostgreSQL, pgvector, and a populated runbook corpus",
+  "deployment: requires an explicitly isolated Phase 7 Compose project",
 ]
