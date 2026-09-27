@@ -146,7 +146,7 @@ jobs:
       - name: Reject tracked secret and state artifacts
         shell: bash
         run: |
-          if git ls-files | grep -E '(^|/)(\.env(\.[^/]+)?|terraform\.tfvars|[^/]+\.tfstate(\.[^/]+)?|[^/]+\.pem|id_rsa)$' >/dev/null; then
+          if git ls-files | grep -E '(^|/)(\.env(\.[^/]+)?|terraform\.tfvars|[^/]+\.tfstate(\.[^/]+)?|[^/]+\.pem|id_rsa)$' | grep -v -E '(^|/)\.env\.example$' >/dev/null; then
             echo 'Tracked secret/state filename detected' >&2
             exit 1
           fi
