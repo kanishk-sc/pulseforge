@@ -79,7 +79,7 @@ flowchart LR
 | Product | React, TypeScript, Redis | Implemented: build-aware APIs, detectors, incidents and evidence UI |
 | Telemetry | Prometheus, Grafana, OpenTelemetry | Implemented Phase 5, optional local profile |
 | Assistant | pgvector, FastEmbed, optional provider adapter | Phase 6: verified offline path; live provider unverified |
-| Deployment | Terraform, AWS ECS/RDS/ElastiCache/S3/ECR | Validated configuration; not applied or publicly deployed |
+| Deployment | Isolated Compose release, private EC2/EBS/S3 Terraform | Local delivery/recovery verified; cloud configuration validated but never applied |
 
 ## Key engineering features
 

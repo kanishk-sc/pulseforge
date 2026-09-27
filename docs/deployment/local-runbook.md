@@ -62,9 +62,28 @@ observability is a diagnostic local profile, not part of critical readiness;
 Tempo still runs as root and is not a hardened cloud target. The default
 `docker compose up -d --build --wait` for development is unchanged.
 
+For a deterministic incident/evidence acceptance, the existing
+`scripts/seed_product_acceptance.py` inserts 140 synthetic events through the
+replay-safe **warehouse** sink, not Kafka/lake. Set the isolated PostgreSQL
+host/port and `.env` password, run that script once, then pass its printed
+`detector_now` into a second finite pipeline with a new build key. Do not
+misrepresent those fixture rows as Kafka-originated lake objects. The
+separate 50-event producer exercise establishes actual Kafka/Spark/lake
+delivery. `scripts/deployment/state_probe.py` reads and compares SQL state
+and SHA-256 of representative nonempty lake/checkpoint objects after a
+quiesced restore; it never writes to PostgreSQL or object storage. Run it
+only while the isolated project under test owns loopback ports 15432/19000:
+
+```sh
+uv run python scripts/deployment/state_probe.py --project pulseforge-p7-example --output .pytest_cache/p7-before.json
+# After stopping source, backup/restore, and starting restored PG/MinIO:
+uv run python scripts/deployment/state_probe.py --project pulseforge-p7-restored --compare .pytest_cache/p7-before.json
+```
+
 For a stop that retains all data, use the same two Compose files/project and
 `stop`, **not** `down -v`. For recovery use the [quiesced procedure](recovery.md).
-Docker's named volumes and container logs can grow; monitor disk occupancy
+Docker's named volumes can grow even though release container logs rotate;
+monitor disk occupancy
 and retain backups before capacity changes. One-host failure loses availability
 until the host/volume is recovered. Do not claim HA or an RPO/RTO from a
 successful local startup.

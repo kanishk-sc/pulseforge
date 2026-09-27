@@ -1,7 +1,8 @@
 # Phase 7 deployment decision and coverage
 
-Status: local delivery and credential-free AWS configuration in progress;
-live AWS deployment requires separate authorization. Design date: 2026-09-27.
+Status: local delivery/recovery executed and AWS configuration statically
+validated; hosted final-head CI is reported in the PR. Live AWS deployment
+requires separate authorization. Design date: 2026-09-27.
 
 ## Decision
 

@@ -788,3 +788,41 @@ during environment installation on OneDrive (`os error 396`, incompatible
 hardlinks) before format, lint, or schema checks ran. The documented sequential
 rerun with `UV_LINK_MODE=copy` passed all three checks; `uv lock --check` resolved
 84 packages. This environment error is not represented as a source-test failure.
+
+# Phase 7 private deployment engineering — 2026-09-27
+
+The complete measured command/result table is in
+[deployment acceptance](deployment/acceptance.md). The chosen target is a
+**private single-host** x86_64 Compose runtime, not the obsolete partial
+public ECS scaffold. Six source-commit-tagged images were built locally;
+the deployment project and restore project used separate Docker volumes and
+loopback ports. The development project/volumes were preserved.
+
+Local execution produced 50 Kafka-delivered/Spark-ingested events and
+committed lake/checkpoint objects, then a 140-row deterministic warehouse
+fixture. Two dbt pipelines each passed 109 results; the second published one
+critical incident with 20 source-evidence records. Explicit model download
+and corpus ingestion indexed 24 chunks. A real browser rendered the incident
+and semantic offline explanation. A Redis outage preserved an eight-point
+HTTP 200 response via database fallback. Quiesced six-volume restore into a
+different project matched SQL, publication, evidence, corpus and representative
+five-class object-content SHA-256; restored Spark kept 190 event IDs and 190
+source positions unique. The restored browser and semantic retrieval worked.
+An intentional dbt failure recorded a failed build without replacing the
+last successful publication. Initial dashboard readiness failed due to a
+`localhost` probe, then passed after IPv4 loopback correction. No result from
+the initial failed attempt is silently counted as success.
+
+Credential-free Terraform 1.10.5 format/init/validate passed. This is
+**static configuration evidence only**: no AWS credentials, plan, apply,
+destroy, SSM session, EBS mount, registry push, public ingress, data upload or
+billable inference were used. Local RPO/RTO and cloud capacity were not
+measured. Kubernetes, live AWS deployment, HA, autoscaling and external
+authentication remain pending design/authorization, not Phase 7 successes.
+Hosted CI on the final PR head is a separate gate to report in the PR after
+it finishes; no hosted result is asserted here in advance.
+The local Windows host has Java 8. An attempted `pytest -m 'not integration'`
+run stalled at a Spark transform case and was interrupted, not counted as
+passed. `pytest -m 'not integration and not spark'` passed 123/123; the
+isolated deployment's Spark 4 container ran and recovered with Java 17.
+Hosted CI remains responsible for the full non-integration/Spark selection.

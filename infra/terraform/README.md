@@ -42,8 +42,9 @@ There are no mocked-provider tests and no live plan.
    and `use_lockfile=true`; never reuse the obsolete ECS state key. State can
    contain sensitive infrastructure metadata. Back it up and restrict access.
 3. Review a saved plan and regional costs before an explicitly approved apply.
-   Terraform creates infrastructure only. `user-data.sh` installs Docker, Git
-   and AWS CLI and enables SSM; it neither formats the protected data volume nor
+   Terraform creates infrastructure only. `user-data.sh` installs Docker,
+   a checksum-pinned Compose v5.1.4 plugin, Python 3.12, Git and AWS CLI,
+   and enables SSM; it neither formats the protected data volume nor
    checks out source, injects secrets, starts containers, or uploads data.
 4. Verify the attached volume by its EBS volume ID, format it **only if proven
    empty and explicitly intended**, mount it, and put Docker's data-root there.
@@ -52,6 +53,29 @@ There are no mocked-provider tests and no live plan.
    The instance role grants SSM and only `backups/` reads/writes in its bucket;
    it does not provide static AWS keys to containers. The MinIO credentials in
    `.env` are local to this host. Follow the release and recovery runbooks.
+
+On the future host, an authorized operator should inspect `lsblk -o
+NAME,SERIAL,SIZE,FSTYPE,MOUNTPOINT`, compare the NVMe serial to the
+`data_volume_id` output, and inspect `blkid` before any formatting. An
+unexpected filesystem or mount is a stop condition, never a reason to erase
+it. For a proven new empty volume, create ext4 once, record its UUID, mount
+it at `/var/lib/docker`, add a UUID-based `/etc/fstab` entry, then start
+Docker; verify `docker info --format '{{.DockerRootDir}}'` reports that mount
+**before** creating any Compose volume. On reboot, a failed data mount must
+stop Docker rather than allow it to create fresh volumes on the root disk.
+For that reason the operator must add a systemd mount dependency for Docker
+and test a reboot/SSM reconnect in the authorized account. The Terraform
+module intentionally does not autoformat or silently mount by `/dev/sdf`
+(which may be a different NVMe device). This host step is **not locally or
+cloud verified** by Phase 7.
+
+The Compose plugin follows [Docker's Linux manual installation
+path](https://docs.docker.com/compose/install/linux/) and verifies the
+[v5.1.4 release checksum](https://github.com/docker/compose/releases/download/v5.1.4/docker-compose-linux-x86_64.sha256).
+The required Python 3.12 package is listed in
+[Amazon Linux 2023 packages](https://docs.aws.amazon.com/linux/al2023/release-notes/new-AL2-AL2023.12.html).
+User-data itself is only syntax-checked locally; successful package
+installation and plugin behavior on the selected AMI remain cloud gates.
 
 The private host needs outbound TLS through the NAT gateway for package/image
 downloads and SSM. The S3 gateway endpoint routes backup traffic without NAT

@@ -46,6 +46,15 @@ After restore, compare against a pre-stop inventory, not only object counts:
   model assets are absent. Verify API publication/freshness and browser states
   before promoting the restored project.
 
+The read-only `state_probe.py` comparison in the [local runbook](local-runbook.md)
+implements SQL identity/mart/build/evidence/corpus checks and representative
+five-class object-content hashes. It is deliberately a sample, **not** a
+full-object audit. Record `kafka-get-offsets.sh --time -2` and `--time -1`
+around the drill to show retained start/end offsets. After starting the
+restored Spark owner, repeat SQL event/source counts and batch-ledger totals;
+they must not increase from replay alone. Measurements are in
+[acceptance](acceptance.md).
+
 The script archives only *currently present* optional volumes. MinIO or Kafka
 can be much larger than a local backup directory; check free space first.
 Do not use `down -v` on the source or restore projects. The source volumes are

@@ -25,11 +25,17 @@ health checks and environment variables.
 | Dashboard / `pulseforge-dashboard:SHA`, nginx | Reverse-proxies API by service DNS; loopback 15173; `/` health | 256 MiB, restart unless stopped, one instance; browser has no application login |
 | Redis / `redis@sha256:02f2…`, AOF server | Bridge only, `redis-data`, ping health | 256 MiB; disposable build-aware cache, not business authority; failures fall back to PG |
 | Assistant setup / `pulseforge-python:SHA`, `download-model`, `migrate`, `ingest` | Explicit profile only; writable model cache for download, read-only for ingestion/API; PG assistant schema and versioned corpus; provider disabled | Model/ingest 1536 MiB, migration 512 MiB; finite single jobs; no implicit download or provider call; vectors rebuildable |
-| Metrics / `ops-exporter` Python, Prometheus, Grafana | Optional `observability`; bridge scraping; loopback 19090/13000; PG exporter; `prometheus-data`/`grafana-data` | Exporter 256 MiB; Prometheus 48h/512MB TSDB; best-effort diagnostics, no data-path dependency |
-| Tracing / OpenTelemetry collector and Tempo | Optional `observability`; loopback 14318/13200; Tempo `tempo-data`; no public ingestion | 256/512 MiB; failure isolated; Tempo inherited root runtime and local trace retention make this **non-hardened**, not a production observability target |
+| Ops exporter / `pulseforge-python:SHA`, `python -m pulseforge.ops_exporter` | Optional `observability`; healthy PG prerequisite, bridge metrics endpoint, no volume | 256 MiB, restart unless stopped; finite-job state is DB-derived, no data-path dependency |
+| Prometheus / `prom/prometheus:v3.5.0`, config/retention flags | Optional `observability`; scrapes bridge targets; loopback 19090, `prometheus-data` | 512 MiB, 48h/512MB TSDB, restart unless stopped; missing scrape is unknown, not zero |
+| Grafana / `grafana/grafana:12.1.1`, stock server | Optional `observability`; provisioning binds, `GF_SECURITY_ADMIN_PASSWORD` from `.env`; loopback 13000, `grafana-data`; starts after Prometheus | 512 MiB, restart unless stopped; admin UI is loopback-only, no public auth posture |
+| OpenTelemetry collector / `otel/opentelemetry-collector:0.143.0`, local config | Optional `observability`; bridge OTLP, loopback 14318, no durable volume | 256 MiB, restart unless stopped; trace-export failure is isolated |
+| Tempo / `grafana/tempo:2.9.5`, local config | Optional `observability`; collector bridge, loopback 13200, `tempo-data` | 512 MiB, restart unless stopped; inherited **root** runtime and unbounded trace-volume growth make this non-hardened |
 
 Services without an explicit Compose memory limit retain Docker's host-level
 contention risk; the 32-GiB sample host is an estimate, not measured capacity.
+The release override uses Docker's local log driver with 10-MiB files and
+three files per container; this bounds container log retention, **not** the
+growth of PostgreSQL, Kafka, MinIO, Airflow or optional Tempo volumes.
 Named Docker volumes must reside on the protected data EBS volume before a cloud
 start. The data EBS volume and the S3 backup bucket are distinct: Terraform
 creates **no** live lake S3 bucket because the app uses MinIO API semantics.
