@@ -36,7 +36,7 @@ def test_release_config_requires_loopback_singletons_and_disabled_provider(monke
     }
     services["api"] = {
         "ports": [{"host_ip": "127.0.0.1"}],
-        "environment": {"ASSISTANT_PROVIDER": "disabled"},
+        "environment": {"ASSISTANT_PROVIDER": "disabled", "ASSISTANT_PROVIDER_KEY": ""},
     }
     monkeypatch.setattr(
         release, "capture", lambda *args, **kwargs: json.dumps({"services": services})
@@ -52,6 +52,14 @@ def test_release_config_requires_loopback_singletons_and_disabled_provider(monke
     services["streaming"]["deploy"]["replicas"] = 1
     services["api"]["environment"]["ASSISTANT_PROVIDER"] = "openai"
     with pytest.raises(RuntimeError, match="provider_must_remain_disabled"):
+        release.verify_configuration("pulseforge-p7-test", "a" * 40)
+    services["api"]["environment"]["ASSISTANT_PROVIDER"] = "disabled"
+    services["api"]["environment"]["ASSISTANT_PROVIDER_KEY"] = "not-allowed"
+    with pytest.raises(RuntimeError, match="provider_key_must_not_be_injected"):
+        release.verify_configuration("pulseforge-p7-test", "a" * 40)
+    services["api"]["environment"]["ASSISTANT_PROVIDER_KEY"] = ""
+    services["api"]["network_mode"] = "host"
+    with pytest.raises(RuntimeError, match="unsafe_container_network"):
         release.verify_configuration("pulseforge-p7-test", "a" * 40)
 
 
@@ -81,6 +89,9 @@ def test_recovery_rejects_running_project_and_archive_tampering(monkeypatch, tmp
     (source / "postgres-data.tar").write_bytes(b"tampered")
     with pytest.raises(RuntimeError, match="archive_checksum_mismatch"):
         recovery.restore("pulseforge-p7-target", source)
+    monkeypatch.setattr(recovery, "volume_exists", lambda name: name.endswith("_grafana-data"))
+    with pytest.raises(RuntimeError, match="target_project_already_has_volumes"):
+        recovery.restore("pulseforge-p7-target", source)
 
 
 def test_recovery_restores_only_new_project_volumes(monkeypatch, tmp_path):
@@ -108,3 +119,12 @@ def test_recovery_restores_only_new_project_volumes(monkeypatch, tmp_path):
         for args in calls
         if args[:2] == ("volume", "create")
     )
+
+
+def test_state_probe_refuses_non_isolated_project():
+    probe = load_script("state_probe.py")
+    with pytest.raises(ValueError, match="explicit_phase7_project"):
+        probe.snapshot(Path(".env"), "pulseforge")
+    assert not probe.representative_candidate("raw/", "raw/v1/_spark_metadata/0")
+    assert probe.representative_candidate("raw/", "raw/v1/part-0.parquet")
+    assert probe.representative_candidate("checkpoints/", "checkpoints/x/commits/0")

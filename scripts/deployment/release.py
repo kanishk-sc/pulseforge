@@ -63,6 +63,8 @@ def verify_configuration(project: str, sha: str) -> None:
         )
     )
     for name, service in config["services"].items():
+        if service.get("network_mode") == "host" or service.get("privileged"):
+            raise RuntimeError(f"unsafe_container_network_or_privilege:{name}")
         for port in service.get("ports", []):
             if port.get("host_ip") != "127.0.0.1":
                 raise RuntimeError(f"non_loopback_port:{name}")
@@ -71,6 +73,8 @@ def verify_configuration(project: str, sha: str) -> None:
             raise RuntimeError(f"invalid_singleton_count:{name}")
     if config["services"]["api"]["environment"].get("ASSISTANT_PROVIDER") != "disabled":
         raise RuntimeError("provider_must_remain_disabled_for_release_acceptance")
+    if config["services"]["api"]["environment"].get("ASSISTANT_PROVIDER_KEY"):
+        raise RuntimeError("provider_key_must_not_be_injected_into_private_release")
 
 
 def image_identity(name: str, sha: str) -> dict[str, str]:

@@ -112,6 +112,10 @@ def backup(project: str, destination: Path) -> None:
 
 def restore(project: str, source: Path) -> None:
     check_project(project)
+    if docker("ps", "-aq", "--filter", f"label=com.docker.compose.project={project}"):
+        raise RuntimeError("target_project_already_has_containers")
+    if any(volume_exists(volume_name(project, key)) for key in VOLUMES):
+        raise RuntimeError("target_project_already_has_volumes")
     source = source.resolve()
     manifest = json.loads((source / "manifest.json").read_text(encoding="utf-8"))
     entries = manifest["volumes"]

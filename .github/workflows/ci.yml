@@ -143,6 +143,17 @@ jobs:
           python-version: "3.12"
       - run: uv sync --frozen
       - run: uv run python scripts/init_env.py
+      - name: Reject tracked secret and state artifacts
+        shell: bash
+        run: |
+          if git ls-files | grep -E '(^|/)(\.env(\.[^/]+)?|terraform\.tfvars|[^/]+\.tfstate(\.[^/]+)?|[^/]+\.pem|id_rsa)$' >/dev/null; then
+            echo 'Tracked secret/state filename detected' >&2
+            exit 1
+          fi
+          if git grep -I -E -e '-----BEGIN (RSA|EC|OPENSSH) PRIVATE KEY-----' -e 'AKIA[0-9A-Z]{16}' -- . >/dev/null; then
+            echo 'Private-key or AWS access-key pattern detected' >&2
+            exit 1
+          fi
       - name: Validate private release configuration
         run: uv run python scripts/deployment/release.py config-check --project pulseforge-p7-ci
       - uses: hashicorp/setup-terraform@v3
