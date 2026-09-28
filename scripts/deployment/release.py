@@ -12,6 +12,22 @@ ROOT = Path(__file__).resolve().parents[2]
 OVERLAY = ROOT / "infra/docker/compose.release.yml"
 IMAGES = ("python", "streaming", "dbt", "airflow", "dashboard", "minio")
 BUILD_SERVICES = ("api", "streaming", "analytics-dbt", "airflow", "dashboard", "minio")
+LOCAL_IMAGE_SERVICES = {
+    "minio": "minio",
+    "bootstrap": "python",
+    "api": "python",
+    "streaming": "streaming",
+    "producer": "python",
+    "analytics-dbt": "dbt",
+    "airflow": "airflow",
+    "dashboard": "dashboard",
+    "product-migrate": "python",
+    "detector": "python",
+    "assistant-model": "python",
+    "assistant-migrate": "python",
+    "assistant-ingest": "python",
+    "ops-exporter": "python",
+}
 PROJECT_PATTERN = re.compile(r"^pulseforge-[a-z0-9-]{3,40}$")
 
 
@@ -68,6 +84,13 @@ def verify_configuration(project: str, sha: str) -> None:
         for port in service.get("ports", []):
             if port.get("host_ip") != "127.0.0.1":
                 raise RuntimeError(f"non_loopback_port:{name}")
+    for name, image in LOCAL_IMAGE_SERVICES.items():
+        service = config["services"].get(name, {})
+        if (
+            service.get("image") != f"pulseforge-{image}:{sha}"
+            or service.get("pull_policy") != "never"
+        ):
+            raise RuntimeError(f"unverified_release_image_config:{name}")
     for name in ("streaming", "producer", "analytics-dbt", "airflow"):
         if config["services"][name].get("deploy", {}).get("replicas") != 1:
             raise RuntimeError(f"invalid_singleton_count:{name}")
@@ -78,7 +101,10 @@ def verify_configuration(project: str, sha: str) -> None:
 
 
 def image_identity(name: str, sha: str) -> dict[str, str]:
-    data = json.loads(capture("docker", "image", "inspect", f"pulseforge-{name}:{sha}"))[0]
+    try:
+        data = json.loads(capture("docker", "image", "inspect", f"pulseforge-{name}:{sha}"))[0]
+    except (subprocess.CalledProcessError, json.JSONDecodeError, IndexError) as exc:
+        raise RuntimeError(f"missing_or_invalid_release_image:{name}") from exc
     if data["Architecture"] != "amd64" or data["Os"] != "linux":
         raise RuntimeError(f"unsupported_image_architecture:{name}")
     return {"image": f"pulseforge-{name}:{sha}", "id": data["Id"]}
@@ -110,6 +136,12 @@ def verify(project: str, manifest: Path) -> None:
     sha = source_sha()
     verify_configuration(project, sha)
     payload = json.loads(manifest.read_text(encoding="utf-8"))
+    if (
+        payload.get("schema_version") != 1
+        or set(payload.get("images", {})) != set(IMAGES)
+        or payload.get("published_externally") is not False
+    ):
+        raise RuntimeError("invalid_release_manifest")
     if payload.get("source_commit") != sha or payload.get("project") != project:
         raise RuntimeError("manifest_source_or_project_mismatch")
     for name in IMAGES:

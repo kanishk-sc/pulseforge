@@ -178,6 +178,8 @@ jobs:
       - run: uv run python scripts/init_env.py
       - name: Build six source-commit release images
         run: uv run python scripts/deployment/release.py build --project pulseforge-p7-ci
+      - name: Verify complete local image manifest before startup
+        run: uv run python scripts/deployment/release.py verify --project pulseforge-p7-ci
       - name: Start an isolated private platform and rerun finite initialization
         shell: bash
         run: |

@@ -2,6 +2,7 @@
 
 import importlib.util
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -31,17 +32,32 @@ def test_release_rejects_dirty_source_and_wrong_project(monkeypatch):
 def test_release_config_requires_loopback_singletons_and_disabled_provider(monkeypatch):
     release = load_script("release.py")
     services = {
-        name: {"ports": [], "deploy": {"replicas": 1}, "environment": {}}
-        for name in ("streaming", "producer", "analytics-dbt", "airflow")
+        name: {
+            "ports": [],
+            "deploy": {"replicas": 1},
+            "environment": {},
+            "image": f"pulseforge-{image}:{'a' * 40}",
+            "pull_policy": "never",
+        }
+        for name, image in release.LOCAL_IMAGE_SERVICES.items()
     }
-    services["api"] = {
-        "ports": [{"host_ip": "127.0.0.1"}],
-        "environment": {"ASSISTANT_PROVIDER": "disabled", "ASSISTANT_PROVIDER_KEY": ""},
+    services["api"]["ports"] = [{"host_ip": "127.0.0.1"}]
+    services["api"]["environment"] = {
+        "ASSISTANT_PROVIDER": "disabled",
+        "ASSISTANT_PROVIDER_KEY": "",
     }
     monkeypatch.setattr(
         release, "capture", lambda *args, **kwargs: json.dumps({"services": services})
     )
     release.verify_configuration("pulseforge-p7-test", "a" * 40)
+    services["dashboard"]["pull_policy"] = "missing"
+    with pytest.raises(RuntimeError, match="unverified_release_image_config:dashboard"):
+        release.verify_configuration("pulseforge-p7-test", "a" * 40)
+    services["dashboard"]["pull_policy"] = "never"
+    services["dashboard"]["image"] = f"pulseforge-dashboard:{'b' * 40}"
+    with pytest.raises(RuntimeError, match="unverified_release_image_config:dashboard"):
+        release.verify_configuration("pulseforge-p7-test", "a" * 40)
+    services["dashboard"]["image"] = f"pulseforge-dashboard:{'a' * 40}"
     services["api"]["ports"][0]["host_ip"] = "0.0.0.0"
     with pytest.raises(RuntimeError, match="non_loopback"):
         release.verify_configuration("pulseforge-p7-test", "a" * 40)
@@ -61,6 +77,43 @@ def test_release_config_requires_loopback_singletons_and_disabled_provider(monke
     services["api"]["network_mode"] = "host"
     with pytest.raises(RuntimeError, match="unsafe_container_network"):
         release.verify_configuration("pulseforge-p7-test", "a" * 40)
+
+
+def test_release_verify_rejects_missing_and_mixed_images(monkeypatch, tmp_path):
+    release = load_script("release.py")
+    sha = "a" * 40
+    monkeypatch.setattr(release, "source_sha", lambda: sha)
+    monkeypatch.setattr(release, "verify_configuration", lambda *_args: None)
+    manifest = tmp_path / "release.json"
+    payload = {
+        "schema_version": 1,
+        "source_commit": sha,
+        "project": "pulseforge-p7-test",
+        "images": {
+            name: {"image": f"pulseforge-{name}:{sha}", "id": name} for name in release.IMAGES
+        },
+        "published_externally": False,
+    }
+    manifest.write_text(json.dumps({**payload, "images": {}}), encoding="utf-8")
+    with pytest.raises(RuntimeError, match="invalid_release_manifest"):
+        release.verify("pulseforge-p7-test", manifest)
+    manifest.write_text(json.dumps(payload), encoding="utf-8")
+    real_image_identity = release.image_identity
+    monkeypatch.setattr(
+        release,
+        "image_identity",
+        lambda name, sha: {"image": f"pulseforge-{name}:{sha}", "id": "other"},
+    )
+    with pytest.raises(RuntimeError, match="image_identity_mismatch"):
+        release.verify("pulseforge-p7-test", manifest)
+    monkeypatch.setattr(release, "image_identity", real_image_identity)
+    monkeypatch.setattr(
+        release,
+        "capture",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(subprocess.CalledProcessError(1, "docker")),
+    )
+    with pytest.raises(RuntimeError, match="missing_or_invalid_release_image:python"):
+        release.image_identity("python", sha)
 
 
 def test_recovery_rejects_running_project_and_archive_tampering(monkeypatch, tmp_path):

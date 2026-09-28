@@ -25,6 +25,7 @@ services:
     stop_grace_period: 60s
   minio:
     image: pulseforge-minio:${PULSEFORGE_RELEASE_SHA:?Set a full reviewed Git commit SHA}
+    pull_policy: never
     ports: !override
       - "127.0.0.1:${PF_RELEASE_MINIO_PORT:-19000}:9000"
       - "127.0.0.1:${PF_RELEASE_MINIO_CONSOLE_PORT:-19001}:9001"
@@ -33,10 +34,12 @@ services:
     stop_grace_period: 60s
   bootstrap:
     image: pulseforge-python:${PULSEFORGE_RELEASE_SHA:?Set a full reviewed Git commit SHA}
+    pull_policy: never
     mem_limit: 512m
     logging: *bounded-logging
   api:
     image: pulseforge-python:${PULSEFORGE_RELEASE_SHA:?Set a full reviewed Git commit SHA}
+    pull_policy: never
     ports: !override ["127.0.0.1:${PF_RELEASE_API_PORT:-18000}:8000"]
     volumes: !override ["model-cache:/app/.cache/pulseforge-model:ro"]
     mem_limit: 1536m
@@ -44,29 +47,34 @@ services:
     stop_grace_period: 30s
   streaming:
     image: pulseforge-streaming:${PULSEFORGE_RELEASE_SHA:?Set a full reviewed Git commit SHA}
+    pull_policy: never
     mem_limit: 3g
     logging: *bounded-logging
     deploy:
       replicas: 1
   producer:
     image: pulseforge-python:${PULSEFORGE_RELEASE_SHA:?Set a full reviewed Git commit SHA}
+    pull_policy: never
     mem_limit: 512m
     logging: *bounded-logging
     deploy:
       replicas: 1
   analytics-dbt:
     image: pulseforge-dbt:${PULSEFORGE_RELEASE_SHA:?Set a full reviewed Git commit SHA}
+    pull_policy: never
     deploy:
       replicas: 1
     logging: *bounded-logging
   airflow:
     image: pulseforge-airflow:${PULSEFORGE_RELEASE_SHA:?Set a full reviewed Git commit SHA}
+    pull_policy: never
     ports: !override ["127.0.0.1:${PF_RELEASE_AIRFLOW_PORT:-18080}:8080"]
     deploy:
       replicas: 1
     logging: *bounded-logging
   dashboard:
     image: pulseforge-dashboard:${PULSEFORGE_RELEASE_SHA:?Set a full reviewed Git commit SHA}
+    pull_policy: never
     ports: !override ["127.0.0.1:${PF_RELEASE_DASHBOARD_PORT:-15173}:80"]
     mem_limit: 256m
     logging: *bounded-logging
@@ -77,14 +85,17 @@ services:
       retries: 5
   product-migrate:
     image: pulseforge-python:${PULSEFORGE_RELEASE_SHA:?Set a full reviewed Git commit SHA}
+    pull_policy: never
     mem_limit: 512m
     logging: *bounded-logging
   detector:
     image: pulseforge-python:${PULSEFORGE_RELEASE_SHA:?Set a full reviewed Git commit SHA}
+    pull_policy: never
     mem_limit: 512m
     logging: *bounded-logging
   assistant-model:
     image: pulseforge-python:${PULSEFORGE_RELEASE_SHA:?Set a full reviewed Git commit SHA}
+    pull_policy: never
     profiles: ["assistant-setup"]
     command: python -m pulseforge.assistant.cli download-model
     volumes: ["model-cache:/app/.cache/pulseforge-model"]
@@ -93,6 +104,7 @@ services:
     restart: "no"
   assistant-migrate:
     image: pulseforge-python:${PULSEFORGE_RELEASE_SHA:?Set a full reviewed Git commit SHA}
+    pull_policy: never
     profiles: ["assistant-setup"]
     command: python -m pulseforge.assistant.cli migrate
     environment:
@@ -107,6 +119,7 @@ services:
     restart: "no"
   assistant-ingest:
     image: pulseforge-python:${PULSEFORGE_RELEASE_SHA:?Set a full reviewed Git commit SHA}
+    pull_policy: never
     profiles: ["assistant-setup"]
     command: python -m pulseforge.assistant.cli ingest
     environment:
@@ -126,6 +139,7 @@ services:
     logging: *bounded-logging
   ops-exporter:
     image: pulseforge-python:${PULSEFORGE_RELEASE_SHA:?Set a full reviewed Git commit SHA}
+    pull_policy: never
     logging: *bounded-logging
   prometheus:
     ports: !override ["127.0.0.1:${PF_RELEASE_PROMETHEUS_PORT:-19090}:9090"]
