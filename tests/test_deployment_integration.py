@@ -7,9 +7,11 @@ from uuid import uuid4
 import psycopg
 import pytest
 from psycopg import sql
+from psycopg.rows import dict_row
 
 from pulseforge.assistant.corpus import apply_migrations as assistant_migrate
 from pulseforge.product.cli import pipeline
+from pulseforge.product.publication import begin_build, fail_build
 from pulseforge.product.schema import apply_migrations as product_migrate
 
 pytestmark = [pytest.mark.integration, pytest.mark.deployment]
@@ -42,6 +44,17 @@ def test_release_migrations_are_serial_and_idempotent(monkeypatch):
                 holder.rollback()
                 assert migrate(contender)
                 assert migrate(contender) == []
+            with psycopg.connect(dsn, row_factory=dict_row) as mapping_connection:
+                assert migrate(mapping_connection) == []
+        with psycopg.connect(dsn, row_factory=dict_row) as mapping_connection:
+            build_id = begin_build(mapping_connection, f"deployment-mapping-row-{uuid4()}")
+            fail_build(mapping_connection, build_id, "intentional integration fixture")
+            assert (
+                mapping_connection.execute(
+                    "SELECT status FROM product.analytics_builds WHERE build_id=%s", (build_id,)
+                ).fetchone()["status"]
+                == "failed"
+            )
         with psycopg.connect(dsn) as holder:
             holder.execute("SELECT pg_advisory_lock(72419022)")
             monkeypatch.setenv("POSTGRES_DB", database)
