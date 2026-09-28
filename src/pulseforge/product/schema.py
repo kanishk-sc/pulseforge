@@ -1,10 +1,16 @@
 from importlib.resources import files
 
 import psycopg
+from psycopg.rows import tuple_row
 
 
 def apply_migrations(connection: psycopg.Connection) -> list[str]:
     """Apply packaged SQL migrations exactly once and return newly applied versions."""
+    with connection.cursor(row_factory=tuple_row) as cursor:
+        cursor.execute("SELECT pg_try_advisory_xact_lock(47921207)")
+        locked = cursor.fetchone()[0]
+    if not locked:
+        raise RuntimeError("Another product schema migration is already running")
     connection.execute("CREATE SCHEMA IF NOT EXISTS product")
     connection.execute(
         """CREATE TABLE IF NOT EXISTS product.schema_migrations (

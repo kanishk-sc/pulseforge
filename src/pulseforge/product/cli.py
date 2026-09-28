@@ -36,6 +36,11 @@ def pipeline(
 ) -> int:
     stale_after_seconds = Settings().analytics_stale_after_seconds
     with psycopg.connect(dsn()) as connection:
+        # Airflow serializes its own DAG, but a manual invocation is separate.
+        # Hold one session lock through dbt, publication and detection so only
+        # one finite writer can target this analytics schema at a time.
+        if not connection.execute("SELECT pg_try_advisory_lock(72419022)").fetchone()[0]:
+            raise RuntimeError("Another analytics pipeline already owns the writer lock")
         apply_migrations(connection)
         published_build = successful_build_for_key(connection, build_key)
         if published_build:

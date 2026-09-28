@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Protocol
 
 import psycopg
-from psycopg.rows import dict_row
+from psycopg.rows import dict_row, tuple_row
 
 MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 MODEL_REPOSITORY = "qdrant/all-MiniLM-L6-v2-onnx"
@@ -206,6 +206,11 @@ def load_corpus(project_root: Path) -> tuple[Document, ...]:
 
 
 def apply_migrations(connection: psycopg.Connection) -> list[str]:
+    with connection.cursor(row_factory=tuple_row) as cursor:
+        cursor.execute("SELECT pg_try_advisory_xact_lock(47921208)")
+        locked = cursor.fetchone()[0]
+    if not locked:
+        raise RuntimeError("Another assistant schema migration is already running")
     connection.execute("CREATE SCHEMA IF NOT EXISTS assistant")
     connection.execute(
         "CREATE TABLE IF NOT EXISTS assistant.schema_migrations "

@@ -79,7 +79,7 @@ flowchart LR
 | Product | React, TypeScript, Redis | Implemented: build-aware APIs, detectors, incidents and evidence UI |
 | Telemetry | Prometheus, Grafana, OpenTelemetry | Implemented Phase 5, optional local profile |
 | Assistant | pgvector, FastEmbed, optional provider adapter | Phase 6: verified offline path; live provider unverified |
-| Deployment | Terraform, AWS ECS/RDS/ElastiCache/S3/ECR | Validated configuration; not applied or publicly deployed |
+| Deployment | Isolated Compose release, private EC2/EBS/S3 Terraform | Local delivery/recovery verified; cloud configuration validated but never applied |
 
 ## Key engineering features
 
@@ -435,13 +435,19 @@ not prove that its cited text supports a claim.
 
 ## Deployment target
 
-[`infra/terraform`](infra/terraform) defines a cost-conscious AWS target with an ALB,
-two Fargate services, encrypted RDS PostgreSQL, encrypted ElastiCache Redis, versioned
-S3, immutable/scanned ECR repositories, CloudWatch logs, Secrets Manager and scoped
-task roles. It validates without credentials and has never been applied. The module
-does not pretend to deploy Kafka, Spark or Airflow; choosing their managed or operated
-targets requires workload and cost evidence first. See its README for exact validation,
-security gaps and billable-resource warnings.
+Phase 7 uses one private x86_64 EC2 host as an explicit, non-HA target for the
+full Compose platform. The [release override](infra/docker/compose.release.yml)
+is isolated from default development Compose, binds all host ports to loopback,
+uses commit-tagged application images and keeps singleton stream/writer ownership.
+[`infra/terraform`](infra/terraform) configures private networking, encrypted
+host/data volumes, SSM operator access and an encrypted backup bucket; it has
+never been applied. No AWS resources, public access, registry push or live
+provider call are created by this repository workflow. The former partial
+ECS/RDS/ElastiCache configuration was replaced because it omitted Kafka,
+Spark and Airflow and exposed an unauthenticated API. Kubernetes and live
+cloud deployment are explicitly deferred. See the [Phase 7 decision](docs/architecture/phase-7-design.md),
+[local runbook](docs/deployment/local-runbook.md), [component map](docs/deployment/components.md),
+[recovery](docs/deployment/recovery.md) and [AWS cost boundary](docs/deployment/aws-cost.md).
 
 ## Current status
 
@@ -451,9 +457,11 @@ publication, versioned cached APIs, deterministic incidents/evidence, React oper
 dashboard, API/Spark/producer/finite-job telemetry, Grafana/Tempo provisioning,
 bounded local reliability acceptance, Compose and CI.
 
-Phase 5 was merged as PR #5. Phase 6 evidence-bound assistance has a verified local
-offline path; its disabled-by-default live provider remains unverified. PR #6 tracks
-the Phase 6 review and merge status. A real cloud deployment remains unimplemented.
+Phase 5 and 6 were merged through PRs #5 and #6. Phase 6 assistance has a verified
+local offline path; its disabled-by-default live provider remains unverified.
+Phase 7 local delivery and credential-free configuration evidence are recorded
+in [verification](docs/verification.md). A real cloud deployment remains
+unimplemented and requires a separate authorization.
 
 ## Screenshots and benchmarks
 
@@ -472,7 +480,7 @@ p50/p95/p99, error counts and an interrupted attempt. They are not production SL
   Python projects would add packaging overhead before independent release cycles exist.
 - Redis is a disposable acceleration layer; PostgreSQL/dbt marts remain authoritative.
 - The dashboard contains no fake values and exposes upstream empty/error conditions.
-- Terraform models an interview-defensible deployment boundary without applying paid infrastructure.
+- Terraform models a private single-host deployment boundary without applying paid infrastructure.
 
 Phase 4's operational APIs, explainable anomaly detectors and dashboard are complete.
 Phase 5 adds operational evidence and bounded reliability experiments. Evidence-based

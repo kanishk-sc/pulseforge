@@ -170,12 +170,18 @@ actual query shapes and bounded API concurrency. Raw object storage supports lon
 replay even after Kafka retention expires. Backups and restore drills are separate from
 replication; both are needed for production reliability.
 
-The validated Terraform target maps the API/dashboard to ECS Fargate behind an ALB and
-uses RDS PostgreSQL, ElastiCache Redis, S3, ECR, Secrets Manager and CloudWatch. Public
-Fargate networking avoids NAT Gateway cost for this demo target; data services remain
-non-public and security-group restricted. Kafka, Spark and Airflow deliberately remain
-outside that module until workload evidence supports a managed or operated choice.
-Nothing has been applied, and no cloud account is required for local development.
+The Phase 7 target is one private x86_64 EC2 host running the *full* Compose
+platform: Kafka, Spark, PostgreSQL/pgvector, MinIO, dbt, finite Airflow, API,
+dashboard and Redis. It is a deliberate single failure domain, not managed
+HA. The host has no public IP or inbound security-group rule; operator access
+is via IAM-gated SSM port forwarding to loopback. An encrypted EBS volume
+holds Docker data; an encrypted/versioned S3 bucket is reserved for separately
+authorized backups. No application secret is a Terraform value. The prior
+public partial ECS/RDS/ElastiCache target was removed rather than called a
+complete deployment. Local release acceptance, static Terraform validation
+and the unexecuted AWS boundary are distinguished in
+[Phase 7 design](phase-7-design.md) and [verification](../verification.md).
+Nothing has been applied to AWS; Kubernetes is explicitly deferred.
 
 ## References
 

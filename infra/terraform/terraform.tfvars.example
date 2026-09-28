@@ -1,4 +1,7 @@
-aws_region        = "us-east-1"
-availability_zones = ["us-east-1a", "us-east-1b"]
-api_image          = "123456789012.dkr.ecr.us-east-1.amazonaws.com/pulseforge-demo-api@sha256:replace-me"
-dashboard_image    = "123456789012.dkr.ecr.us-east-1.amazonaws.com/pulseforge-demo-dashboard@sha256:replace-me"
+aws_region          = "us-east-1"
+availability_zone   = "us-east-1a"
+# Resolve and review an x86_64 Amazon Linux 2023 AMI in the authorized account/region.
+ami_id              = "ami-0123456789abcdef0"
+backup_bucket_name  = "replace-with-globally-unique-pulseforge-backup-name"
+instance_type       = "m6i.2xlarge"
+data_volume_size_gib = 200

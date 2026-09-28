@@ -78,11 +78,20 @@ mocked adapter test does not establish live provider compatibility or model qual
 See [Phase 6 design](phase-6-design.md), [evaluation rubric](../assistant/evaluation.md)
 and [verification](../verification.md).
 
-## 7. Deployment engineering — gated on working local platform
-- [ ] Kubernetes deployments/services/config/probes/resources for owned services
-- [x] Terraform AWS target for ECS, ALB, RDS, ElastiCache, S3, ECR, IAM and logs; validated but never applied
-- [x] Demo cost trade-offs, production security gaps and state/deletion safeguards documented
-- [ ] Recovery drills, autoscaling policy and measured capacity guidance
+## 7. Deployment engineering — local delivery; cloud pending authorization
+- [ ] Kubernetes runtime: explicitly deferred in the [Phase 7 decision](phase-7-design.md), not implemented or verified
+- [x] Complete private single-host Compose deployment contract and commit-tagged image delivery; default local Compose preserved
+- [x] Credential-free Terraform configuration for one EC2 host, private VPC, protected encrypted EBS and backup S3; **not applied**
+- [x] Cost, security, remote-state, release and recovery procedures documented
+- [ ] Live AWS deployment, account-aware plan, capacity/autoscaling and measured cloud recovery: separate authorization required
+
+The former partial ECS/ALB/RDS/ElastiCache module was incompatible with the
+full platform and is not a deployable Phase 7 target. The new module is
+statically validated, not evidence of cloud operation. Local execution and
+restore results are reported separately in [verification](../verification.md)
+and [deployment acceptance](../deployment/acceptance.md). A single host does
+not have autoscaling or HA. Do not mark the original live-cloud/Kubernetes
+roadmap complete from local tests.
 
 ## Verification policy
 Run Ruff format/check and pytest after code changes. Run relevant services and record
