@@ -826,3 +826,14 @@ run stalled at a Spark transform case and was interrupted, not counted as
 passed. `pytest -m 'not integration and not spark'` passed 123/123; the
 isolated deployment's Spark 4 container ran and recovered with Java 17.
 Hosted CI remains responsible for the full non-integration/Spark selection.
+
+## Phase 7 PR review — 2026-09-28
+
+The new review evidence is recorded in [deployment acceptance](deployment/acceptance.md).
+It includes a six-case release/recovery guard test, credential-free Terraform
+format/init/validate, a resolved Compose check that locally built images
+cannot be pulled from a registry, and a fresh read-only comparison of the
+preserved restored PostgreSQL and representative lake/checkpoint state.
+This review did **not** repeat the original producer-to-browser drill, Spark
+replay exercise or an AWS deployment. Hosted results must be attributed to
+the exact PR head linked in PR #7, not inferred from the earlier run.

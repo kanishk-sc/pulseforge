@@ -22,8 +22,11 @@ Rates and sizing sources: [AWS m6i instance specification](https://aws.amazon.co
 [AWS EBS gp3 pricing](https://aws.amazon.com/ebs/pricing/), and
 [AWS S3 pricing](https://aws.amazon.com/s3/pricing/). Rates can differ by date,
 region, purchase option and account. The $337.27 example is neither a capacity
-measurement nor a bill forecast. Extra EBS IOPS/throughput, S3 requests and
-version churn, internet egress, CloudWatch/SSM logging, backup copies,
+measurement nor a bill forecast. The linked AWS EC2 example uses a Windows
+Server workload; its $0.384/h compute figure is an **illustrative assumption**
+here, not verification of a current Linux quote. Confirm the Linux on-demand
+rate in the intended account before provisioning. Extra EBS IOPS/throughput,
+S3 requests and version churn, internet egress, CloudWatch/SSM logging, backup copies,
 snapshots, support, taxes, and any model/provider service are **not included**.
 No ALB, RDS, MSK, ElastiCache, ECR or Kubernetes charge is modeled because
 none is provisioned. A budget alarm is an operator prerequisite, not created.

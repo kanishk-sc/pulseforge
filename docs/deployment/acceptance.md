@@ -53,7 +53,7 @@ After adding the checksum-pinned Compose host prerequisite,
 passed shell syntax; it did **not** execute user data on Amazon Linux.
 No mocked-provider test, account-aware plan, AWS apply, AMI/SSM test, EBS
 mount/reboot test or cost measurement was performed. The Linux deployment
-and recovery CI jobs must still run on the exact final PR head. The local
+and recovery CI jobs must be checked on the exact final PR head. The local
 hosted-CI-independent checks include Ruff format/lint, `uv lock --check`,
 exported schema, 123 non-integration/non-Spark Python tests, 5 release-tool
 unit tests, 1 isolated migration/concurrency integration test, 8 frontend
@@ -71,3 +71,27 @@ pass. The 123-case non-Spark selection passed separately. Actual Spark
 streaming was exercised in the Java-17 release container; the existing
 hosted Linux Python/streaming jobs must establish the full regression gate.
 [Spark 4.0.1 documents Java 17/21 support](https://spark.apache.org/docs/4.0.1/).
+
+## Review checks (2026-09-28)
+
+The following checks are new review evidence, not a repeat of the full
+2026-09-27 producer-to-browser drill. The source/restored named volumes were
+retained. The existing development project was not stopped.
+
+| Exact command or check | Observed result |
+| --- | --- |
+| `$env:UV_LINK_MODE='copy'; uv run --isolated pytest -q tests/test_deployment.py --basetemp .pytest_cache/p7-review-guard3` | 6 passed after adding missing/mismatched image and manifest checks. An earlier invocation failed because the test's mocked image-inspection function was not restored before the next assertion; the test harness was corrected. |
+| `$env:UV_LINK_MODE='copy'; uv run --isolated pytest -q -m 'not integration and not spark' --basetemp .pytest_cache/p7-review-unit-final` | 124 passed, 38 deselected, two upstream deprecation warnings. Spark tests were deliberately excluded because this Windows host has Java 8; the Linux hosted Python job must run them. |
+| `$env:UV_LINK_MODE='copy'; uv lock --check`; `uv run --isolated ruff format --check .`; `uv run --isolated ruff check .`; `uv run --isolated python scripts/export_schema.py --check` | Lock resolved 84 packages; 113 files already formatted; lint passed; exported v1 schema matched the Pydantic contract. |
+| `docker compose -p pulseforge-p7-review -f docker-compose.yml -f infra/docker/compose.release.yml --profile '*' config --format json` with `PULSEFORGE_RELEASE_SHA` set to the reviewed commit | Resolved config contained 14 locally built services with full-SHA tags and `pull_policy: never`. Digest-pinned PostgreSQL, Kafka and Redis remain registry dependencies. |
+| `docker run --rm --mount "type=bind,source=$((Get-Location).Path),target=/workspace" -w /workspace/infra/terraform hashicorp/terraform:1.10.5 fmt -check -recursive`; same container invocation with `init -backend=false -lockfile=readonly -input=false` and `validate -no-color` | Exit 0 for format, init reused locked AWS provider v5.100.0, validate reported `Success! The configuration is valid.` No account-aware plan or AWS resource operation. |
+| `docker compose -p pulseforge-p7-restored -f docker-compose.yml -f infra/docker/compose.release.yml up -d --no-build --wait --wait-timeout 120 postgres minio`; `$env:UV_LINK_MODE='copy'; uv run --isolated python scripts/deployment/state_probe.py --project pulseforge-p7-restored --compare .pytest_cache/p7-source-parquet.json` | Both services healthy. Read-only comparison reported `matched=true`, 190 unique events/source positions, 4 batches, successful build `b05de9eb-c18d-4fa7-95d4-7d77a0b9c2d0`, 1 incident, 20 evidence rows, 24 corpus chunks and 5 representative object classes. The two services were stopped without removing volumes. This did not replay Spark again. |
+| `$env:UV_LINK_MODE='copy'; uv run --isolated pytest -q tests/test_deployment_integration.py --run-integration --run-deployment --basetemp .pytest_cache/p7-review-integration` with `POSTGRES_HOST=127.0.0.1`, `POSTGRES_PORT=15432` and the isolated `pulseforge-p7-final` project | 1 passed against a UUID-named disposable database; product/assistant migration concurrency and reruns, dictionary-row use, and writer-lock rejection were exercised. The isolated PostgreSQL service was stopped without volume deletion. |
+
+The release review added a no-registry-pull guard for locally built images and
+an explicit CI manifest-verification step. CI on the exact new head remains a
+separate GitHub gate; the PR description links the final run and result. The
+cost worksheet's arithmetic remains an illustrative assumption, not an AWS
+quote: its EC2 reference is a Windows Server example, not a verified current
+Linux price. No cloud provisioning, image publishing or public exposure was
+performed in this review.

@@ -2,8 +2,10 @@
 
 Use one clean, reviewed source commit and its `phase7-release.json` image-ID
 manifest. The `scripts/deployment/release.py` tool checks image architecture,
-SHA and private/singleton Compose configuration; it never pushes or deploys
-to AWS. The cloud host is not initialized by Terraform user data. A future
+SHA, complete image IDs and private/singleton Compose configuration. Run its
+`verify` command after `build` and before starting a release. Locally built
+services cannot pull a missing tag from a registry. The tool never pushes or
+deploys to AWS. The cloud host is not initialized by Terraform user data. A future
 authorized operator must first verify the AMI/SSM session, protected EBS
 volume identity/mount, Docker data-root, private `.env`, disk space, approved
 source/images, and a recoverable quiesced backup. Do not put application

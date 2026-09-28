@@ -57,6 +57,9 @@ they must not increase from replay alone. Measurements are in
 
 The script archives only *currently present* optional volumes. MinIO or Kafka
 can be much larger than a local backup directory; check free space first.
+If extraction fails partway through, the target volumes are intentionally left
+in place for diagnosis and cannot be reused by the restore command. Inspect the
+failure and retry into another fresh project; never promote a partial restore.
 Do not use `down -v` on the source or restore projects. The source volumes are
 retained for comparison; clean them only through a separately reviewed
 destructive action after backup validation. A successful local restore does

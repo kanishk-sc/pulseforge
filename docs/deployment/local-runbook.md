@@ -23,9 +23,13 @@ On PowerShell use `$env:PULSEFORGE_RELEASE_SHA=(git rev-parse HEAD)` instead
 of `export`. `release.py` refuses a dirty tree, a default project name,
 non-loopback host ports, multiple singleton replicas or enabled provider.
 Its manifest records the source SHA and local image IDs but is not a signed
-attestation and is not uploaded. The `postgres`, `kafka`, `minio`, `redis`
-images in the release override use reviewed digest references. The source
-images are built locally and tagged with the SHA; no registry push occurs.
+attestation and is not uploaded. PostgreSQL, Kafka and Redis use reviewed
+digest references. MinIO is built locally from a checksum-verified release
+asset. The source images are built locally and tagged with the SHA; no registry
+push occurs.
+Locally built services have `pull_policy: never`, so a missing commit-tagged
+image fails rather than being fetched from a registry. The separate digest-pinned
+PostgreSQL, Kafka and Redis images remain public dependencies.
 
 For a bounded traffic sample, run the finite producer explicitly (do not
 leave a generator running unattended):

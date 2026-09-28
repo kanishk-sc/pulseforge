@@ -41,7 +41,10 @@ live-cloud and autoscaling portions remain pending, not silently checked off.
   Airflow analytics publication; transactional locks serialize product and
   corpus migrations. Existing sink/ledger uniqueness remains authoritative.
 - The release builds source-commit-tagged images and records local image IDs.
-  It never pushes a registry. The pinned MinIO asset and SHA-256 check repair
+  Locally built services use `pull_policy: never`: a missing image fails rather
+  than fetching an unrelated registry image, and verification compares every
+  image ID with the complete local manifest before startup. It never pushes a
+  registry. The pinned MinIO asset and SHA-256 check repair
   availability only; they are not a security upgrade. Base build images are
   version-tagged rather than digest-pinned, so byte-for-byte rebuilds across
   registries are not guaranteed; record the manifest and retain image archives
