@@ -1,101 +1,94 @@
 # PulseForge
 
-**A real-time data and AI operations platform for synthetic commerce and logistics.**
+**An end-to-end data engineering portfolio project for synthetic commerce and
+logistics events.** A regional payment failure can hide inside healthy-looking
+aggregate revenue. PulseForge preserves the source events, builds tested metrics,
+detects an anomaly deterministically, and lets an operator inspect the incident's
+original evidence. All events, customers, incidents, and screenshots here are
+**synthetic**; there are no real users or business-impact claims.
 
-PulseForge explores how an engineering team can trace business events from ingestion
-to reliable operational decisions: preserve the original event, validate its contract,
-process it once at the sink, model the business, detect explainable anomalies, and
-show the evidence behind an incident.
+![The local incident view shows a synthetic payment anomaly, its threshold, source-event evidence and an explicit stale-data warning.](docs/portfolio/assets/incident-evidence.png)
 
-**Current milestone: Phase 6 — evidence-bound incident assistance, offline path verified.**
-Kafka ingestion, Spark Structured Streaming, raw/cleaned/curated Parquet, a dead-letter
-pipeline, an idempotent PostgreSQL sink, dbt analytics and finite Airflow orchestration
-are implemented. Successful analytics are atomically published to a versioned FastAPI
-surface, deterministic detectors persist evidence-backed incidents, and the React
-dashboard exposes the result. Phase 5 observability is merged. Phase 6 adds an opt-in,
-read-only incident explanation backed by the original analytics build and versioned
-runbooks. Offline summaries work without a provider; live provider inference is not
-part of the verified local path. All generated data is synthetic.
+*Genuine local browser capture, 2026-09-28. This historical build was stale at
+capture time; the banner is a real product state, not a current-data claim.*
+[More screenshots and the narrated route](docs/portfolio/demo-guide.md).
+There is no hosted demo.
 
-See the [implementation checklist](docs/architecture/implementation-plan.md) and
-[actual verification record](docs/verification.md).
-
-## Demo
-
-There is no hosted demo. The full system is reproducible with Docker Compose; the
-dashboard runs at `http://localhost:5173` and reads real dbt marts through FastAPI.
-No screenshot is checked in because the current evidence is the runnable path and its
-tests rather than a staged image.
-
-## Business problem
-
-A payment provider can fail in one region while aggregate revenue still looks normal.
-Shipment delays and refunds can follow later. Teams need fresh metrics, trustworthy
-data and a reproducible path from an alert back to its source events. PulseForge's
-target workflow connects those stages without making an LLM responsible for detection.
-
-## Architecture
-
-Solid arrows describe implemented paths. Dashed arrows describe future phases.
+## The two-minute architecture
 
 ```mermaid
-flowchart LR
-    P[Python synthetic producer] --> K[Kafka: versioned event topic]
-    B[Idempotent bootstrap] --> K
-    B --> L[MinIO / S3-compatible lake]
-    A[FastAPI liveness and readiness] --> K
-    A --> L
-    A --> W[(PostgreSQL)]
-    K --> S[Spark archive query]
-    S --> RAW[MinIO raw Parquet]
-    RAW --> V[Spark validation and event-time deduplication]
-    V --> D[Kafka dead-letter topic]
-    V --> C[MinIO cleaned / curated Parquet]
-    V --> ST[PostgreSQL JDBC staging]
-    ST --> W
-    W --> M[Minute operational aggregates]
-    W --> DBT[dbt facts / dimensions / marts]
-    AF[Airflow finite batch orchestration] --> DBT
-    DBT --> PUB[(Immutable successful publication)]
-    PUB --> DET[Deterministic detectors]
-    PUB --> API[Versioned metrics and status APIs]
-    DET --> INC[(Incidents and source evidence)]
-    INC --> API
-    API --> UI[React operations dashboard]
-    INC --> RAG[Phase 6: evidence-bound assistant]
-    V[(Versioned pgvector runbooks)] --> RAG
-    RAG --> API
+flowchart TB
+    P[Synthetic producer] --> K[(Kafka)] --> S[Spark streaming]
+    S --> L[(MinIO raw / cleaned / curated)]
+    S --> W[(PostgreSQL events + metrics)]
+    S --> DLQ[Kafka dead-letter topic]
+    W --> D[dbt tested marts]
+    A[Airflow finite jobs] --> D
+    D --> B[(Successful build)]
+    B --> X[Detectors] --> I[(Incidents + evidence)]
+    B --> API[FastAPI build-aware reads]
+    I --> API
+    I --> E[Offline explanation]
+    R[(Versioned runbooks)] --> E
+    E --> API
+    API <--> C[(Redis)]
+    API --> UI[React dashboard]
 ```
 
-| Layer | Technology | Purpose and status |
-| --- | --- | --- |
-| Contracts / producer | Python, Pydantic, aiokafka | Implemented: versioned validation, journeys, fault injection, confirmed delivery |
-| Event backbone | Kafka in KRaft mode | Implemented: three partitions, event and dead-letter topics, seven-day retention |
-| Database | PostgreSQL, SQLAlchemy, asyncpg, psycopg, JDBC | Unique stream events, transactional batch ledger and minute aggregates |
-| Lake | MinIO, S3A, Parquet | Immutable raw evidence; committed cleaned/curated batches |
-| API | FastAPI | Implemented: liveness, dependency readiness, OpenAPI, request IDs, JSON logs |
-| Streaming | Spark 4.0.1, PySpark, Kafka connector | Event-time deduplication, DLQ, checkpoint recovery and JDBC staging |
-| Modeling | dbt, Airflow | Implemented: documented facts/dimensions/marts, tests and finite hourly DAG |
-| Product | React, TypeScript, Redis | Implemented: build-aware APIs, detectors, incidents and evidence UI |
-| Telemetry | Prometheus, Grafana, OpenTelemetry | Implemented Phase 5, optional local profile |
-| Assistant | pgvector, FastEmbed, optional provider adapter | Phase 6: verified offline path; live provider unverified |
-| Deployment | Isolated Compose release, private EC2/EBS/S3 Terraform | Local delivery/recovery verified; cloud configuration validated but never applied |
+The stream owns its checkpoints; Airflow only runs finite analytics work.
+Redis is disposable—PostgreSQL and the published build are authoritative.
+An optional local Prometheus/Grafana/Tempo profile observes the system; it
+does not prove end-to-end freshness. A private single-host EC2/Compose
+deployment is **configured but has never been applied to AWS**.
 
-## Key engineering features
+Three decisions carry the reliability story:
 
-- Lossless raw Kafka evidence, explicit dead-letter reasons and watermark-aware deduplication
-- Idempotent PostgreSQL sinks backed by event and source-offset uniqueness constraints
-- dbt event-grain facts and tested marts with business denominators kept explicit
-- Airflow batch orchestration separated from Spark's checkpoint-owned streaming lifecycle
-- Redis-cached typed analytics APIs with direct-warehouse fallback during cache failure
-- Real-data React dashboard plus bounded-cardinality Prometheus metrics and optional traces
-- Read-only, citation-checked offline incident explanations from original-build evidence and versioned local runbooks
+1. Preserve original Kafka bytes in raw storage; validate and route bad
+   records to a dead-letter topic, then combine event-time deduplication with
+   durable PostgreSQL event/offset uniqueness for replay safety.
+2. Publish only a fully tested dbt generation. Metrics, detectors, and
+   build-aware cache keys use that successful generation; stale or failed
+   builds are visible rather than blended with new partial results.
+3. Keep anomaly detection deterministic. The optional assistant reads
+   persisted original-build evidence and versioned runbooks, with citations
+   and explicit uncertainty; the verified local path makes no provider call.
 
-## Tech stack
+## Try it locally
 
-Python 3.12, SQL, TypeScript, React, FastAPI, Pydantic, Kafka, Spark Structured
-Streaming, PostgreSQL, SQLAlchemy, MinIO/S3, dbt, Airflow, Redis, Prometheus, Grafana,
-OpenTelemetry, Docker Compose, Terraform, pytest and GitHub Actions.
+Prerequisites: Docker Desktop with Linux containers, Compose v2, Git, and
+[uv](https://docs.astral.sh/uv/getting-started/installation/). These commands
+work in **PowerShell** and Bash from the repository root:
+
+```sh
+uv sync --frozen
+uv run python scripts/init_env.py
+docker compose up -d --build --wait --wait-timeout 180
+docker compose --profile product run --rm --build product-migrate
+docker compose --profile product up -d --build --wait --wait-timeout 180 redis api dashboard
+```
+
+Open `http://127.0.0.1:5173`. Before a successful analytics build, expect an
+explicit empty/unavailable state, not fabricated metrics. For a reproducible
+producer → Spark → dbt → incident → offline explanation walkthrough, use the
+[demo guide](docs/portfolio/demo-guide.md). The long-form development and
+test commands remain below. Keep all local ports on loopback; this stack has
+no application authentication or TLS.
+
+## Evidence and boundaries
+
+| Claim | Evidence / boundary |
+| --- | --- |
+| Implemented | Kafka/Spark/lake/warehouse, dbt/Airflow, build-aware API, deterministic incidents, React UI, local telemetry and offline explanation. [Architecture](docs/architecture/architecture.md) · [implementation checklist](docs/architecture/implementation-plan.md) |
+| Locally verified | Populated pipeline, replay and failure tests, browser flow, isolated release and restore. Results are bounded to the stated fixtures and host. [Verification log](docs/verification.md) · [deployment acceptance](docs/deployment/acceptance.md) |
+| Hosted CI | [PR #7 final-head checks](https://github.com/kanishk-sc/pulseforge/actions/runs/36477116362) passed six jobs; this is test evidence, not a cloud rollout. |
+| Cloud configuration | Terraform statically validated for private EC2/EBS/S3; no account-aware plan, AWS apply, live host or measured cloud RPO/RTO. [Deployment decision](docs/architecture/phase-7-design.md) · [limits and costs](docs/deployment/aws-cost.md) |
+
+The [engineering case study](docs/portfolio/engineering-case-study.md)
+explains the tradeoffs and regressions; the
+[interview sheet](docs/portfolio/resume-and-interview.md) is a concise
+technical talking guide.
+
+## Detailed development notes
 
 ## Local setup
 
@@ -449,42 +442,15 @@ cloud deployment are explicitly deferred. See the [Phase 7 decision](docs/archit
 [local runbook](docs/deployment/local-runbook.md), [component map](docs/deployment/components.md),
 [recovery](docs/deployment/recovery.md) and [AWS cost boundary](docs/deployment/aws-cost.md).
 
-## Current status
+## Measurement and status notes
 
-Implemented: event contracts and generation, Kafka/Spark processing, raw/cleaned lake,
-idempotent PostgreSQL sinks, dbt models/tests, Airflow orchestration, immutable analytics
-publication, versioned cached APIs, deterministic incidents/evidence, React operations
-dashboard, API/Spark/producer/finite-job telemetry, Grafana/Tempo provisioning,
-bounded local reliability acceptance, Compose and CI.
-
-Phase 5 and 6 were merged through PRs #5 and #6. Phase 6 assistance has a verified
-local offline path; its disabled-by-default live provider remains unverified.
-Phase 7 local delivery and credential-free configuration evidence are recorded
-in [verification](docs/verification.md). A real cloud deployment remains
-unimplemented and requires a separate authorization.
-
-## Screenshots and benchmarks
-
-Phase 5 [bounded local measurements](docs/benchmarks/phase5-report.md) and
-[verification](docs/verification.md) record environment, concurrency, throughput,
-p50/p95/p99, error counts and an interrupted attempt. They are not production SLAs.
-
-## Engineering decisions and next milestones
-
-- Kafka decouples event ingestion from downstream outages and supports replay.
-- KRaft and one broker keep local setup small; this is not a highly available deployment.
-- Producer idempotence handles broker retries within a session. Spark applies event-time
-  deduplication, while PostgreSQL uniqueness is the durable backstop across restarts.
-- Readiness probes fail closed, with bounded calls; liveness stays independent.
-- One Python package shares contracts across separately runnable services. Separate
-  Python projects would add packaging overhead before independent release cycles exist.
-- Redis is a disposable acceleration layer; PostgreSQL/dbt marts remain authoritative.
-- The dashboard contains no fake values and exposes upstream empty/error conditions.
-- Terraform models a private single-host deployment boundary without applying paid infrastructure.
-
-Phase 4's operational APIs, explainable anomaly detectors and dashboard are complete.
-Phase 5 adds operational evidence and bounded reliability experiments. Evidence-based
-AI is a later, separate phase. No paid infrastructure is created automatically.
+Phase 7's local delivery and recovery evidence is in
+[verification](docs/verification.md) and
+[deployment acceptance](docs/deployment/acceptance.md). The Phase 5
+[bounded local measurements](docs/benchmarks/phase5-report.md) include
+environment, concurrency, throughput, latency percentiles, error counts
+and an interrupted attempt; none are production SLAs. The disabled-by-default
+live assistant provider and an AWS deployment remain unverified.
 
 ## Optional local observability
 
