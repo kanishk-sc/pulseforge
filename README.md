@@ -17,23 +17,21 @@ There is no hosted demo.
 ## The two-minute architecture
 
 ```mermaid
-flowchart LR
-    P[Synthetic Python producer] --> K[(Kafka event log)]
-    K --> S[Spark Structured Streaming]
+flowchart TB
+    P[Synthetic producer] --> K[(Kafka)] --> S[Spark streaming]
     S --> L[(MinIO raw / cleaned / curated)]
-    S --> W[(PostgreSQL events + minute metrics)]
+    S --> W[(PostgreSQL events + metrics)]
     S --> DLQ[Kafka dead-letter topic]
     W --> D[dbt tested marts]
-    A[Finite Airflow DAG] --> D
-    D --> B[(Immutable successful build)]
-    B --> X[Deterministic detectors]
-    X --> I[(Incidents + source evidence)]
+    A[Airflow finite jobs] --> D
+    D --> B[(Successful build)]
+    B --> X[Detectors] --> I[(Incidents + evidence)]
     B --> API[FastAPI build-aware reads]
     I --> API
-    R[(Versioned pgvector runbooks)] --> E[Offline evidence summary]
-    I --> E
+    I --> E[Offline explanation]
+    R[(Versioned runbooks)] --> E
     E --> API
-    API <--> C[(Redis cache)]
+    API <--> C[(Redis)]
     API --> UI[React dashboard]
 ```
 
